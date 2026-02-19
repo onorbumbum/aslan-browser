@@ -528,3 +528,31 @@ The full dentist search flow demonstrated the Phase 7 design working end-to-end:
 5. `tab.list(sessionId)` → confirms only the right tabs are in scope
 
 Total socket calls for opening + reading 6 dentist pages: **5 calls** (create session, scrape Google, create 6 tabs, batch navigate, batch read). Without batch that would be 14+ sequential calls.
+
+---
+
+## Phase 8 — Loading Feedback
+
+**Status:** Complete ✅
+
+### Changes
+- Loading state tracking via `isLoading` property and WKNavigationDelegate hooks
+- Firefox-style status bar at bottom of window (appears during loading, shows URL)
+- Go/Stop button next to URL field ("→" idle, "✕" loading)
+- URL field text grays out during loading (`.tertiaryLabelColor`)
+- API-initiated navigation (JSON-RPC) also triggers all visual feedback immediately
+
+### Implementation Details
+
+1. **Status bar uses toggling height constraint** — Instead of just `isHidden`, the status bar height constraint toggles between 0 and 20. This ensures the WKWebView reclaims the 20px when the status bar is hidden, since Auto Layout still reserves space for hidden views with active constraints.
+
+2. **Go button wired after `super.init()`** — Same pattern as the URL field. Button is created before `super.init()` with nil target/action, then `target = self` and `action = #selector(goButtonAction(_:))` are set after.
+
+3. **`didStartProvisionalNavigation` is nonisolated** — Matches the pattern of existing WKNavigationDelegate methods. Dispatches to MainActor via `Task { @MainActor in }`.
+
+4. **Loading state set in `navigate()` before `webView.load()`** — For API-initiated navigation, `isLoading` is set to true and `updateLoadingUI()` called before the switch/load block. This ensures the UI updates immediately without waiting for the `didStartProvisionalNavigation` delegate callback.
+
+5. **Loading UI is separate from readiness tracking** — `isLoading` is purely for visual feedback. The readiness system (`didFinishNavigation`, `domStable`, `networkIdle`, `readyStateComplete`) remains unchanged and is used by `waitForIdle`.
+
+### Files Modified
+- `aslan-browser/BrowserTab.swift` — All changes in this single file

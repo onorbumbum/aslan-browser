@@ -1,0 +1,79 @@
+{
+  "metadata": {
+    "phase": "8",
+    "name": "Loading Feedback",
+    "description": "Add status bar and Go/Stop button for visual loading feedback",
+    "projectRoot": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser",
+    "sourceDir": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser",
+    "xcodeprojPath": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser.xcodeproj",
+    "scheme": "aslan-browser",
+    "socketPath": "/tmp/aslan-browser.sock",
+    "previousPhase": "7"
+  },
+  "workItems": [
+    {
+      "id": "loading-state-tracking",
+      "status": "done",
+      "title": "Add isLoading property and navigation delegate hooks",
+      "description": "Add isLoading and loadingURL properties to BrowserTab. Implement webView(_:didStartProvisionalNavigation:) to set isLoading=true. Modify existing didFinish, didFail, didFailProvisionalNavigation to set isLoading=false. Add stub updateLoadingUI() method. All delegate methods must be nonisolated and dispatch to MainActor.",
+      "filesToModify": [
+        "aslan-browser/BrowserTab.swift"
+      ],
+      "dependsOn": [],
+      "verifyBuild": true
+    },
+    {
+      "id": "status-bar",
+      "status": "done",
+      "title": "Add Firefox-style status bar at bottom of window",
+      "description": "Add a non-editable NSTextField at the bottom of the container view, below the WKWebView. Use a toggling height constraint (0 when hidden, 20 when visible) so the webView reclaims the space. Show 'Loading [url]...' during navigation, hide when done. Update the Auto Layout constraint chain: urlBar top → webView middle → statusBar bottom.",
+      "filesToModify": [
+        "aslan-browser/BrowserTab.swift"
+      ],
+      "dependsOn": [
+        "loading-state-tracking"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "go-button",
+      "status": "done",
+      "title": "Add Go/Stop button next to URL field",
+      "description": "Add an NSButton to the right of the URL text field. Shows '→' when idle (click to navigate), shows '✕' when loading (click to stop). Adjust URL field trailing constraint to make room for the button. Wire target/action after super.init(). The goButtonAction calls urlFieldAction when idle, or webView.stopLoading() when loading.",
+      "filesToModify": [
+        "aslan-browser/BrowserTab.swift"
+      ],
+      "dependsOn": [
+        "loading-state-tracking"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "url-bar-loading-feedback",
+      "status": "done",
+      "title": "Gray out URL field text during loading",
+      "description": "In updateLoadingUI(), set urlField.textColor to .tertiaryLabelColor when loading, .textColor when idle. Minimal change — just color feedback on the existing URL field.",
+      "filesToModify": [
+        "aslan-browser/BrowserTab.swift"
+      ],
+      "dependsOn": [
+        "status-bar",
+        "go-button"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "api-navigate-feedback",
+      "status": "done",
+      "title": "Ensure JSON-RPC navigate triggers visual feedback immediately",
+      "description": "In BrowserTab.navigate(to:waitUntil:timeout:), after resetReadinessState(), set isLoading=true, loadingURL=urlString, and call updateLoadingUI() BEFORE the switch/webView.load() call. This ensures status bar and button update immediately for API-initiated navigation, not just after the delegate callback fires.",
+      "filesToModify": [
+        "aslan-browser/BrowserTab.swift"
+      ],
+      "dependsOn": [
+        "url-bar-loading-feedback"
+      ],
+      "verifyBuild": true
+    }
+  ]
+}

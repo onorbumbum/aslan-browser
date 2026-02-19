@@ -19,6 +19,9 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
     let window: NSWindow
     var sessionId: String?
     private var urlField: NSTextField?
+    private var goButton: NSButton?
+    private var statusBar: NSTextField?
+    private var statusBarHeightConstraint: NSLayoutConstraint?
 
     private var navigationContinuation: CheckedContinuation<NavigationResult, Error>?
     private var messageHandler: ScriptMessageHandler?
@@ -28,6 +31,10 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
 
     // Window close callback — set by TabManager to handle close button
     var onWindowClose: ((_ tabId: String) -> Void)?
+
+    // Loading UI state
+    private(set) var isLoading: Bool = false
+    private var loadingURL: String?
 
     // Readiness tracking
     private var didFinishNavigation = false
@@ -71,19 +78,54 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
 
         wv.translatesAutoresizingMaskIntoConstraints = false
 
+        // Status bar — thin text field at bottom
+        let statusBar = NSTextField(labelWithString: "")
+        statusBar.font = NSFont.systemFont(ofSize: 11)
+        statusBar.textColor = .secondaryLabelColor
+        statusBar.backgroundColor = .windowBackgroundColor
+        statusBar.drawsBackground = true
+        statusBar.isEditable = false
+        statusBar.isBezeled = false
+        statusBar.lineBreakMode = .byTruncatingMiddle
+        statusBar.translatesAutoresizingMaskIntoConstraints = false
+        statusBar.isHidden = true
+        self.statusBar = statusBar
+
+        let statusBarHeight = statusBar.heightAnchor.constraint(equalToConstant: 0)
+        self.statusBarHeightConstraint = statusBarHeight
+
+        // Go/Stop button next to URL bar
+        let goBtn = NSButton(title: "→", target: nil, action: nil)
+        goBtn.bezelStyle = .texturedRounded
+        goBtn.font = NSFont.systemFont(ofSize: 14)
+        goBtn.translatesAutoresizingMaskIntoConstraints = false
+        self.goButton = goBtn
+
         container.addSubview(urlBar)
+        container.addSubview(goBtn)
         container.addSubview(wv)
+        container.addSubview(statusBar)
 
         NSLayoutConstraint.activate([
             urlBar.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
             urlBar.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
-            urlBar.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -4),
+            urlBar.trailingAnchor.constraint(equalTo: goBtn.leadingAnchor, constant: -4),
             urlBar.heightAnchor.constraint(equalToConstant: 28),
+
+            goBtn.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
+            goBtn.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -4),
+            goBtn.widthAnchor.constraint(equalToConstant: 36),
+            goBtn.heightAnchor.constraint(equalToConstant: 28),
 
             wv.topAnchor.constraint(equalTo: urlBar.bottomAnchor, constant: 4),
             wv.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             wv.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            wv.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            wv.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
+
+            statusBar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            statusBar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            statusBar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            statusBarHeight,
         ])
 
         if isHidden {
@@ -100,6 +142,10 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
         urlBar.target = self
         urlBar.action = #selector(urlFieldAction(_:))
         self.urlField = urlBar
+
+        // Wire up Go button after super.init()
+        goBtn.target = self
+        goBtn.action = #selector(goButtonAction(_:))
 
         win.delegate = self
         self.webView.navigationDelegate = self
@@ -219,6 +265,17 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
         urlField?.stringValue = webView.url?.absoluteString ?? ""
     }
 
+    @objc private func goButtonAction(_ sender: NSButton) {
+        if isLoading {
+            webView.stopLoading()
+            isLoading = false
+            updateLoadingUI()
+        } else {
+            guard let urlField = urlField else { return }
+            urlFieldAction(urlField)
+        }
+    }
+
     @objc private func urlFieldAction(_ sender: NSTextField) {
         var urlString = sender.stringValue.trimmingCharacters(in: .whitespaces)
         if urlString.isEmpty { return }
@@ -277,6 +334,10 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
             throw BrowserError.invalidURL(urlString)
         }
         resetReadinessState()
+
+        self.isLoading = true
+        self.loadingURL = urlString
+        self.updateLoadingUI()
 
         switch waitUntil {
         case .none:
@@ -595,10 +656,39 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
         return base64
     }
 
+    // MARK: - Loading UI
+
+    private func updateLoadingUI() {
+        if isLoading {
+            statusBar?.stringValue = "Loading \(loadingURL ?? "")…"
+            statusBar?.isHidden = false
+            statusBarHeightConstraint?.constant = 20
+            goButton?.title = "✕"
+            urlField?.textColor = .tertiaryLabelColor
+        } else {
+            statusBar?.stringValue = ""
+            statusBar?.isHidden = true
+            statusBarHeightConstraint?.constant = 0
+            goButton?.title = "→"
+            urlField?.textColor = .textColor
+        }
+    }
+
     // MARK: - WKNavigationDelegate
+
+    nonisolated func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        Task { @MainActor in
+            self.isLoading = true
+            self.loadingURL = webView.url?.absoluteString
+            self.updateLoadingUI()
+        }
+    }
 
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor in
+            self.isLoading = false
+            self.updateLoadingUI()
+
             self.didFinishNavigation = true
             self.readyStateComplete = true // didFinish implies readyState complete
             self.checkIdleAndResume()
@@ -617,6 +707,9 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
 
     nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         Task { @MainActor in
+            self.isLoading = false
+            self.updateLoadingUI()
+
             self.navigationContinuation?.resume(throwing: BrowserError.navigationFailed(error.localizedDescription))
             self.navigationContinuation = nil
         }
@@ -624,6 +717,9 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
 
     nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         Task { @MainActor in
+            self.isLoading = false
+            self.updateLoadingUI()
+
             self.navigationContinuation?.resume(throwing: BrowserError.navigationFailed(error.localizedDescription))
             self.navigationContinuation = nil
         }
