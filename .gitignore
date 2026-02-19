@@ -3,7 +3,7 @@
 *.sync-conflict-*
 
 # Aslan skill — user-specific learnings (personal, not committed)
-.pi/skills/aslan-browser/learnings/user.md
+skills/aslan-browser/learnings/user.md
 
 # Profiling
 *.profraw

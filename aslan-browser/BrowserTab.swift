@@ -25,6 +25,8 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
 
     private var navigationContinuation: CheckedContinuation<NavigationResult, Error>?
     private var messageHandler: ScriptMessageHandler?
+    private var urlObservation: NSKeyValueObservation?
+    private var titleObservation: NSKeyValueObservation?
 
     // Event callback: (method, params) — set by TabManager
     var onEvent: ((_ method: String, _ params: [String: Any]) -> Void)?
@@ -157,6 +159,19 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
         }
         self.messageHandler = handler
         config.userContentController.add(handler, name: "agent")
+
+        // KVO: update address bar & window title whenever URL or title changes
+        urlObservation = webView.observe(\.url, options: [.new]) { [weak self] _, _ in
+            Task { @MainActor in
+                self?.updateURLField()
+                self?.updateWindowTitle()
+            }
+        }
+        titleObservation = webView.observe(\.title, options: [.new]) { [weak self] _, _ in
+            Task { @MainActor in
+                self?.updateWindowTitle()
+            }
+        }
     }
 
     // MARK: - Script Message Handling
@@ -307,6 +322,10 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
     // MARK: - Cleanup
 
     func cleanup() {
+        urlObservation?.invalidate()
+        urlObservation = nil
+        titleObservation?.invalidate()
+        titleObservation = nil
         onEvent = nil
         onWindowClose = nil
         navigationContinuation = nil

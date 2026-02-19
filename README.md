@@ -39,6 +39,7 @@ Aslan wraps macOS's built-in WKWebView and exposes it over a Unix socket. No Chr
   - [Option A: Build from Source](#option-a-build-from-source)
   - [Option B: Download Pre-built Binary](#option-b-download-pre-built-binary)
 - [Python SDK](#python-sdk)
+- [AI Agent Skill](#ai-agent-skill)
 - [Usage Examples](#usage-examples)
 - [API Reference](#api-reference)
 - [Architecture](#architecture)
@@ -216,6 +217,52 @@ async with AsyncAslanBrowser() as browser:
 ```python
 browser = AslanBrowser(socket_path="/tmp/my-custom.sock")
 ```
+
+---
+
+## AI Agent Skill
+
+Aslan ships a **skill** — a structured instruction set that teaches AI coding agents (Claude, GPT, etc.) how to drive the browser effectively. It follows the [Prompts-are-Code](docs/prompts-are-code.md) methodology: the skill is a program that executes on the LLM.
+
+The skill lives in `skills/aslan-browser/` and includes:
+
+```
+skills/aslan-browser/
+├── SKILL.md                    # Instructions — the "program" the agent follows
+└── learnings/
+    ├── browser.md              # Discovered gotchas and patterns (committed, grows over time)
+    └── user.md                 # User-specific preferences (gitignored)
+```
+
+| File | Purpose |
+|---|---|
+| `SKILL.md` | Teaches the agent to use the Python SDK, drive interactively (navigate → read → decide → act), handle multi-tab research, and avoid known pitfalls |
+| `learnings/browser.md` | Runtime discoveries — ATS quirks, contenteditable workarounds, site-specific patterns. Agents load this at session start so they don't repeat past mistakes |
+| `learnings/user.md` | Your personal preferences and workflows. Gitignored — stays on your machine |
+
+The SDK Reference at [`sdk/python/SDK_REFERENCE.md`](sdk/python/SDK_REFERENCE.md) is the agent's cheat sheet for all available methods.
+
+### Installing the Skill
+
+The skill needs to be accessible from your agent's skill directory. The cleanest approach is a **symlink** — one source of truth, edits go to one place, `git pull` updates the skill.
+
+```bash
+# For pi agents (default skill path: ~/.pi/agent/skills/)
+ln -s /path/to/aslan-browser/skills/aslan-browser ~/.pi/agent/skills/aslan-browser
+```
+
+Your agent framework may use a different skill directory. Point the symlink wherever your agent loads skills from.
+
+### How It Works
+
+When your agent gets a browsing task, it loads the skill and follows this loop:
+
+1. **Setup** — Load `SDK_REFERENCE.md` + `learnings/browser.md` + `learnings/user.md` into context
+2. **Verify** — Check that Aslan is running via the SDK
+3. **Drive interactively** — Navigate → read the page → decide next action → act → repeat
+4. **Self-improve** — After the task, append any new discoveries to `learnings/browser.md`
+
+The learnings files are the skill's persistent memory. Each session starts by loading them, and ends by appending anything new. Over time, the skill gets smarter about site-specific quirks, workarounds, and efficient patterns.
 
 ---
 
@@ -535,8 +582,15 @@ aslan-browser/
 │       ├── aslan_browser/
 │       │   ├── client.py       # Sync client
 │       │   └── async_client.py # Async client
+│       ├── SDK_REFERENCE.md    # Agent-facing cheat sheet for all SDK methods
 │       ├── tests/
 │       └── pyproject.toml
+├── skills/
+│   └── aslan-browser/
+│       ├── SKILL.md            # AI agent instructions (Prompts-are-Code)
+│       └── learnings/
+│           ├── browser.md      # Discovered patterns and gotchas (committed)
+│           └── user.md         # User-specific preferences (gitignored)
 ├── benchmarks/
 │   ├── benchmark.py
 │   └── complex_page.html
