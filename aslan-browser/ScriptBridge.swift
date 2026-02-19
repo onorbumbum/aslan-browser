@@ -140,6 +140,227 @@ enum ScriptBridge {
                 window.__agent.startDOMObserver();
             })();
 
+            // --- Accessibility tree extraction ---
+
+            (function() {
+
+                // Role inference map: tag (+ input type) → ARIA role
+                var ROLE_MAP = {
+                    "A": "link",
+                    "BUTTON": "button",
+                    "SELECT": "combobox",
+                    "TEXTAREA": "textbox",
+                    "IMG": "img",
+                    "H1": "heading", "H2": "heading", "H3": "heading",
+                    "H4": "heading", "H5": "heading", "H6": "heading",
+                    "NAV": "navigation",
+                    "MAIN": "main",
+                    "HEADER": "banner",
+                    "FOOTER": "contentinfo",
+                    "ASIDE": "complementary",
+                    "FORM": "form",
+                    "TABLE": "table",
+                    "UL": "list",
+                    "OL": "list",
+                    "LI": "listitem"
+                };
+
+                var INPUT_TYPE_ROLES = {
+                    "text": "textbox",
+                    "email": "textbox",
+                    "password": "textbox",
+                    "search": "textbox",
+                    "tel": "textbox",
+                    "url": "textbox",
+                    "number": "textbox",
+                    "checkbox": "checkbox",
+                    "radio": "radio",
+                    "submit": "button",
+                    "button": "button",
+                    "reset": "button"
+                };
+
+                // Tags that are always included (interactive or semantic)
+                var INTERACTIVE_TAGS = {
+                    "A": true, "BUTTON": true, "INPUT": true,
+                    "SELECT": true, "TEXTAREA": true
+                };
+
+                var LANDMARK_TAGS = {
+                    "NAV": true, "MAIN": true, "HEADER": true,
+                    "FOOTER": true, "ASIDE": true, "FORM": true
+                };
+
+                var SEMANTIC_TAGS = {
+                    "H1": true, "H2": true, "H3": true,
+                    "H4": true, "H5": true, "H6": true,
+                    "IMG": true, "TABLE": true,
+                    "UL": true, "OL": true, "LI": true
+                };
+
+                function getRole(el) {
+                    // Explicit role attribute takes priority
+                    var explicitRole = el.getAttribute("role");
+                    if (explicitRole) return explicitRole;
+
+                    var tag = el.tagName;
+
+                    if (tag === "INPUT") {
+                        var inputType = (el.getAttribute("type") || "text").toLowerCase();
+                        return INPUT_TYPE_ROLES[inputType] || null;
+                    }
+
+                    return ROLE_MAP[tag] || null;
+                }
+
+                function isHidden(el) {
+                    // aria-hidden
+                    if (el.getAttribute("aria-hidden") === "true") return true;
+
+                    var style = window.getComputedStyle(el);
+                    if (style.display === "none") return true;
+                    if (style.visibility === "hidden") return true;
+
+                    // Zero bounding rect
+                    var rect = el.getBoundingClientRect();
+                    if (rect.width === 0 && rect.height === 0) return true;
+
+                    return false;
+                }
+
+                function shouldInclude(el) {
+                    var tag = el.tagName;
+
+                    // Always include interactive elements
+                    if (INTERACTIVE_TAGS[tag]) return true;
+
+                    // Include landmarks
+                    if (LANDMARK_TAGS[tag]) return true;
+
+                    // Include semantic elements
+                    if (SEMANTIC_TAGS[tag]) return true;
+
+                    // Include any element with explicit role attribute
+                    if (el.hasAttribute("role")) return true;
+
+                    return false;
+                }
+
+                function resolveName(el) {
+                    // 1. aria-label
+                    var ariaLabel = el.getAttribute("aria-label");
+                    if (ariaLabel) return ariaLabel.trim();
+
+                    // 2. aria-labelledby
+                    var labelledBy = el.getAttribute("aria-labelledby");
+                    if (labelledBy) {
+                        var ids = labelledBy.split(/\\s+/);
+                        var parts = [];
+                        for (var i = 0; i < ids.length; i++) {
+                            var ref = document.getElementById(ids[i]);
+                            if (ref) parts.push(ref.textContent.trim());
+                        }
+                        var joined = parts.join(" ").trim();
+                        if (joined) return joined;
+                    }
+
+                    // 3. Associated <label>
+                    if (el.id) {
+                        var label = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+                        if (label) {
+                            var labelText = label.textContent.trim();
+                            if (labelText) return labelText;
+                        }
+                    }
+                    // Parent <label>
+                    var parentLabel = el.closest("label");
+                    if (parentLabel) {
+                        var parentText = parentLabel.textContent.trim();
+                        if (parentText) return parentText;
+                    }
+
+                    // 4. placeholder
+                    var placeholder = el.getAttribute("placeholder");
+                    if (placeholder) return placeholder.trim();
+
+                    // 5. title
+                    var titleAttr = el.getAttribute("title");
+                    if (titleAttr) return titleAttr.trim();
+
+                    // 6. Visible textContent (truncated to 80 chars, whitespace-collapsed)
+                    var text = (el.textContent || "").replace(/\\s+/g, " ").trim();
+                    if (text.length > 80) text = text.substring(0, 80);
+                    return text;
+                }
+
+                function getRect(el) {
+                    var r = el.getBoundingClientRect();
+                    return {
+                        x: Math.round(r.x * 100) / 100,
+                        y: Math.round(r.y * 100) / 100,
+                        w: Math.round(r.width * 100) / 100,
+                        h: Math.round(r.height * 100) / 100
+                    };
+                }
+
+                function getValue(el) {
+                    var tag = el.tagName;
+                    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+                        return el.value || "";
+                    }
+                    return undefined;
+                }
+
+                window.__agent.extractA11yTree = function() {
+                    var nodes = [];
+                    var refIndex = 0;
+
+                    // Remove old refs
+                    var oldRefs = document.querySelectorAll("[data-agent-ref]");
+                    for (var i = 0; i < oldRefs.length; i++) {
+                        oldRefs[i].removeAttribute("data-agent-ref");
+                    }
+
+                    // TreeWalker for efficient DOM traversal
+                    var walker = document.createTreeWalker(
+                        document.body || document.documentElement,
+                        NodeFilter.SHOW_ELEMENT,
+                        null
+                    );
+
+                    var el = walker.currentNode;
+                    while (el) {
+                        if (el.nodeType === Node.ELEMENT_NODE && shouldInclude(el) && !isHidden(el)) {
+                            var role = getRole(el);
+                            if (role) {
+                                var ref = "@e" + refIndex;
+                                el.setAttribute("data-agent-ref", ref);
+
+                                var node = {
+                                    ref: ref,
+                                    role: role,
+                                    name: resolveName(el),
+                                    tag: el.tagName
+                                };
+
+                                var val = getValue(el);
+                                if (val !== undefined) {
+                                    node.value = val;
+                                }
+
+                                node.rect = getRect(el);
+
+                                nodes.push(node);
+                                refIndex++;
+                            }
+                        }
+                        el = walker.nextNode();
+                    }
+
+                    return nodes;
+                };
+            })();
+
             // --- waitForSelector ---
 
             window.__agent.waitForSelector = function(selector, timeoutMs) {

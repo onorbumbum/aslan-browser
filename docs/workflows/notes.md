@@ -50,6 +50,8 @@ Runtime discoveries, edge cases, and gotchas found during implementation. Update
 
 6. **Window restoration warning** — `NSWindowRestoration` "Unable to find className=(null)" appears because AppKit tries to restore previously saved window state. Suppressed by setting `NSQuitAlwaysKeepsWindows = false` in UserDefaults before `app.run()`.
 
+7. **App Sandbox re-enabled** — Sandbox was disabled in Phase 2 for socket access. Re-enabled with proper entitlements: `network.client`, `network.server`, `files.user-selected.read-write`, `files.downloads.read-write`, and a temporary exception for `/tmp/aslan-browser.sock`. This gives WKWebView's WebContent process proper sandbox permissions, eliminating most pasteboard/launchservices errors.
+
 ### Architecture
 
 Socket server running on `/tmp/aslan-browser.sock`. JSON-RPC methods: `navigate`, `evaluate`, `screenshot`, `getTitle`, `getURL`.
@@ -69,6 +71,52 @@ Pipeline: `LineBasedFrameDecoder` → `JSONRPCHandler` → `MethodRouter` → `B
 ## Phase 3 — ScriptBridge + Readiness Detection
 
 **Status:** Complete ✅
+
+---
+
+## Phase 4 — Accessibility Tree
+
+**Status:** Complete ✅
+
+### Decisions
+
+1. **A11y tree extraction is a single IIFE in ScriptBridge** — All DOM walker code (role inference, name resolution, ref assignment, hidden element filtering) lives in one IIFE block within `ScriptBridge.injectedJS`. Follows the Phase 3 pattern of embedding JS as Swift string literals.
+
+2. **Interaction methods use `callAsyncJavaScript` with argument passing** — Click, fill, select, keypress, and scroll methods pass selectors/values as `callAsyncJavaScript` arguments (not string interpolation) to avoid injection attacks.
+
+3. **Target resolution in Swift, not JS** — The `resolveSelector()` helper in BrowserTab converts `@eN` refs to `[data-agent-ref="@eN"]` CSS selectors before passing to JS. Keeps JS simple.
+
+### Discoveries
+
+1. **Regex in Swift multiline strings needs double-backslash** — JS regex like `/\s+/` must be written as `/\\s+/` inside Swift multiline string literals (`"""`). `\s` is not a valid Swift escape sequence.
+
+2. **`TreeWalker` for DOM traversal** — Used `document.createTreeWalker` instead of recursive descent for efficient DOM walking. Only visits ELEMENT_NODE types.
+
+3. **Refs are ephemeral** — `extractA11yTree()` removes all previous `data-agent-ref` attributes before assigning new sequential refs starting from `@e0`. This means refs from a previous extraction are invalid after a new one.
+
+4. **Hidden element detection covers 4 cases** — `aria-hidden="true"`, `display:none`, `visibility:hidden`, and zero-size bounding rect (width === 0 && height === 0).
+
+5. **`getValue()` returns `undefined` for non-input elements** — Only INPUT, TEXTAREA, and SELECT elements include `value` in the tree node. Other elements omit the field entirely (not `null`).
+
+### Architecture
+
+`extractA11yTree()` flow:
+1. Remove all existing `data-agent-ref` attributes
+2. TreeWalker traversal over `document.body`
+3. For each element: `shouldInclude()` → `!isHidden()` → `getRole()` → assign ref → `resolveName()` → `getValue()` → `getRect()`
+4. Returns flat array of node objects
+
+Interaction methods: `click`, `fill`, `select`, `keypress`, `scroll` — all resolve targets via `@eN` refs or CSS selectors.
+
+JSON-RPC methods added: `getAccessibilityTree`, `click`, `fill`, `select`, `keypress`, `scroll`
+
+### Files Added
+- `aslan-browser/Models/A11yNode.swift` — Codable structs for A11yNode and A11yRect
+
+### Files Modified
+- `aslan-browser/ScriptBridge.swift` — Added `extractA11yTree()` with role inference, name resolution, ref assignment, hidden element filtering
+- `aslan-browser/BrowserTab.swift` — Added `getAccessibilityTree()`, `click()`, `fill()`, `select()`, `keypress()`, `scroll()`, `resolveSelector()` 
+- `aslan-browser/MethodRouter.swift` — Wired 6 new JSON-RPC methods
 
 ### Decisions
 

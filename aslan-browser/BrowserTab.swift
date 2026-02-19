@@ -201,6 +201,159 @@ class BrowserTab: NSObject, WKNavigationDelegate {
         }
     }
 
+    // MARK: - Accessibility Tree
+
+    func getAccessibilityTree() async throws -> [[String: Any]] {
+        let result = try await webView.callAsyncJavaScript(
+            "return window.__agent.extractA11yTree()",
+            arguments: [:],
+            contentWorld: .page
+        )
+
+        guard let nodes = result as? [[String: Any]] else {
+            return []
+        }
+
+        return nodes
+    }
+
+    // MARK: - Interaction
+
+    /// Resolves a target to a CSS selector: @eN refs → [data-agent-ref="@eN"], otherwise used as-is.
+    private func resolveSelector(_ target: String) -> String {
+        if target.hasPrefix("@") {
+            return "[data-agent-ref=\"\(target)\"]"
+        }
+        return target
+    }
+
+    func click(target: String) async throws {
+        let selector = resolveSelector(target)
+        let script = """
+            var el = document.querySelector(selector);
+            if (!el) throw new Error("Element not found: " + selector);
+            el.focus();
+            el.click();
+            return true;
+            """
+        do {
+            _ = try await webView.callAsyncJavaScript(
+                script,
+                arguments: ["selector": selector],
+                contentWorld: .page
+            )
+        } catch {
+            throw BrowserError.javaScriptError("click failed: \(error.localizedDescription)")
+        }
+    }
+
+    func fill(target: String, value: String) async throws {
+        let selector = resolveSelector(target)
+        let script = """
+            var el = document.querySelector(selector);
+            if (!el) throw new Error("Element not found: " + selector);
+            el.focus();
+            el.value = value;
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+            return true;
+            """
+        do {
+            _ = try await webView.callAsyncJavaScript(
+                script,
+                arguments: ["selector": selector, "value": value],
+                contentWorld: .page
+            )
+        } catch {
+            throw BrowserError.javaScriptError("fill failed: \(error.localizedDescription)")
+        }
+    }
+
+    func select(target: String, value: String) async throws {
+        let selector = resolveSelector(target)
+        let script = """
+            var el = document.querySelector(selector);
+            if (!el) throw new Error("Element not found: " + selector);
+            el.value = value;
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+            return true;
+            """
+        do {
+            _ = try await webView.callAsyncJavaScript(
+                script,
+                arguments: ["selector": selector, "value": value],
+                contentWorld: .page
+            )
+        } catch {
+            throw BrowserError.javaScriptError("select failed: \(error.localizedDescription)")
+        }
+    }
+
+    func keypress(key: String, modifiers: [String: Bool]? = nil) async throws {
+        let script = """
+            var opts = {
+                key: key,
+                code: key.length === 1 ? "Key" + key.toUpperCase() : key,
+                bubbles: true,
+                cancelable: true
+            };
+            if (mods.ctrlKey) opts.ctrlKey = true;
+            if (mods.shiftKey) opts.shiftKey = true;
+            if (mods.altKey) opts.altKey = true;
+            if (mods.metaKey) opts.metaKey = true;
+
+            var target = document.activeElement || document.body;
+            target.dispatchEvent(new KeyboardEvent("keydown", opts));
+            target.dispatchEvent(new KeyboardEvent("keyup", opts));
+            return true;
+            """
+        let mods: [String: Bool] = modifiers ?? [:]
+        do {
+            _ = try await webView.callAsyncJavaScript(
+                script,
+                arguments: ["key": key, "mods": mods],
+                contentWorld: .page
+            )
+        } catch {
+            throw BrowserError.javaScriptError("keypress failed: \(error.localizedDescription)")
+        }
+    }
+
+    func scroll(x: Double, y: Double, target: String? = nil) async throws {
+        if let target {
+            let selector = resolveSelector(target)
+            let script = """
+                var el = document.querySelector(selector);
+                if (!el) throw new Error("Element not found: " + selector);
+                el.scrollIntoView({ behavior: "instant", block: "center" });
+                return true;
+                """
+            do {
+                _ = try await webView.callAsyncJavaScript(
+                    script,
+                    arguments: ["selector": selector],
+                    contentWorld: .page
+                )
+            } catch {
+                throw BrowserError.javaScriptError("scroll failed: \(error.localizedDescription)")
+            }
+        } else {
+            let script = """
+                window.scrollTo(x, y);
+                return true;
+                """
+            do {
+                _ = try await webView.callAsyncJavaScript(
+                    script,
+                    arguments: ["x": x, "y": y],
+                    contentWorld: .page
+                )
+            } catch {
+                throw BrowserError.javaScriptError("scroll failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
     // MARK: - Evaluate
 
     func evaluate(_ script: String, args: [String: Any]? = nil) async throws -> Any? {
