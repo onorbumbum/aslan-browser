@@ -139,20 +139,26 @@ with AslanBrowser() as b:
 
 ### Option B: Download Pre-built Binary
 
-> **Coming soon** — Pre-built `.app` bundles will be available on the [Releases](https://github.com/onorbumbum/aslan-browser/releases) page.
-
-Once downloaded:
+Download the latest `.zip` from [**Releases**](https://github.com/onorbumbum/aslan-browser/releases).
 
 ```bash
-# Move to Applications (optional)
-cp -r Aslan\ Browser.app /Applications/
+# 1. Download and unzip
+curl -L -o aslan-browser.zip \
+  https://github.com/onorbumbum/aslan-browser/releases/latest/download/aslan-browser-macos-arm64.zip
+unzip aslan-browser.zip
 
-# Start the browser
-/Applications/Aslan\ Browser.app/Contents/MacOS/aslan-browser --hidden
+# 2. Allow the app (first run only — it's dev-signed, not notarized)
+xattr -cr aslan-browser.app
 
-# Install the Python SDK
-pip install aslan-browser
+# 3. Start the browser
+./aslan-browser.app/Contents/MacOS/aslan-browser --hidden
+
+# 4. Install the Python SDK (from source for now)
+git clone https://github.com/onorbumbum/aslan-browser.git
+pip install -e aslan-browser/sdk/python
 ```
+
+> **Note:** This is an Apple Silicon (arm64) build. Requires macOS 15.0+.
 
 ---
 
@@ -656,7 +662,7 @@ See the [Python SDK source](sdk/python/aslan_browser/client.py) for a complete c
 
 ## Roadmap
 
-- [ ] Pre-built binaries on GitHub Releases
+- [x] Pre-built binaries on GitHub Releases
 - [ ] `pip install aslan-browser` on PyPI
 - [ ] Content blocking (ad/tracker filtering via `WKContentRuleList`)
 - [ ] PDF text extraction
