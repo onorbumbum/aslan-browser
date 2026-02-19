@@ -10,6 +10,10 @@ import Foundation
 class AppDelegate: NSObject, NSApplicationDelegate {
 
     static func main() {
+        // Disable window state restoration to suppress
+        // "Unable to find className=(null)" warning
+        UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
+
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
