@@ -1,0 +1,87 @@
+{
+  "metadata": {
+    "phase": "6",
+    "name": "Python SDK + Polish",
+    "description": "Python client library, documentation, benchmarks",
+    "projectRoot": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser",
+    "sourceDir": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser",
+    "sdkDir": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/sdk/python",
+    "xcodeprojPath": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser.xcodeproj",
+    "scheme": "aslan-browser",
+    "socketPath": "/tmp/aslan-browser.sock",
+    "previousPhase": "5"
+  },
+  "workItems": [
+    {
+      "id": "package-setup",
+      "status": "pending",
+      "title": "Create Python package structure",
+      "description": "Create sdk/python/ with: pyproject.toml (name: aslan-browser, version 0.1.0, requires-python >=3.10), aslan_browser/__init__.py (exports AslanBrowser, AsyncAslanBrowser), aslan_browser/client.py, aslan_browser/async_client.py. No external dependencies for the sync client. Async client uses only stdlib asyncio.",
+      "filesToCreate": ["sdk/python/pyproject.toml", "sdk/python/aslan_browser/__init__.py", "sdk/python/aslan_browser/client.py", "sdk/python/aslan_browser/async_client.py"],
+      "verifyBuild": false
+    },
+    {
+      "id": "sync-client",
+      "status": "pending",
+      "title": "Implement sync Python client",
+      "description": "In client.py, create AslanBrowser class. Connects to Unix socket. Sends NDJSON JSON-RPC requests. Reads newline-delimited responses. Methods: navigate(url, tab_id, wait_until), evaluate(script, tab_id), screenshot(tab_id, quality), get_accessibility_tree(tab_id), click(target, tab_id), fill(target, value, tab_id), select(target, value, tab_id), get_title(tab_id), get_url(tab_id), get_html(tab_id, selector), get_cookies(tab_id), set_cookie(cookie, tab_id), go_back(tab_id), go_forward(tab_id), reload(tab_id), wait_for_selector(selector, tab_id, timeout), tab_create(url, width, height), tab_close(tab_id), tab_list(), close(). Auto-increment request IDs. Handle JSON-RPC errors by raising exceptions. Default tab_id to 'tab0'.",
+      "filesToModify": ["sdk/python/aslan_browser/client.py"],
+      "dependsOn": ["package-setup"],
+      "verifyBuild": false
+    },
+    {
+      "id": "async-client",
+      "status": "pending",
+      "title": "Implement async Python client",
+      "description": "In async_client.py, create AsyncAslanBrowser class. Same API as sync client but all methods are async. Uses asyncio.open_unix_connection. Supports concurrent requests by matching response id to pending request. Background task reads responses and routes them. Handles JSON-RPC notifications via an optional callback.",
+      "filesToModify": ["sdk/python/aslan_browser/async_client.py"],
+      "dependsOn": ["package-setup"],
+      "verifyBuild": false
+    },
+    {
+      "id": "screenshot-handling",
+      "status": "pending",
+      "title": "Add screenshot convenience in Python SDK",
+      "description": "screenshot() returns decoded bytes (base64 → bytes). Add save_screenshot(path, tab_id, quality) convenience that writes JPEG to disk. Both sync and async clients.",
+      "filesToModify": ["sdk/python/aslan_browser/client.py", "sdk/python/aslan_browser/async_client.py"],
+      "dependsOn": ["sync-client", "async-client"],
+      "verifyBuild": false
+    },
+    {
+      "id": "connection-management",
+      "status": "pending",
+      "title": "Add connection management, retry, and graceful shutdown",
+      "description": "Add connection retry with backoff (3 attempts, 100ms/500ms/1000ms). Context manager support (with AslanBrowser() as browser:). Graceful close that disconnects socket cleanly. Auto-reconnect on connection drop for sync client. Clean error messages when socket doesn't exist.",
+      "filesToModify": ["sdk/python/aslan_browser/client.py", "sdk/python/aslan_browser/async_client.py"],
+      "dependsOn": ["sync-client", "async-client"],
+      "verifyBuild": false
+    },
+    {
+      "id": "sdk-tests",
+      "status": "pending",
+      "title": "Create SDK integration tests",
+      "description": "Create sdk/python/tests/test_integration.py. Tests require running aslan-browser app. Test the full agent workflow: connect → navigate → get a11y tree → fill → click → screenshot → close. Test multi-tab. Test error handling (bad selector, invalid URL). Use pytest.",
+      "filesToCreate": ["sdk/python/tests/test_integration.py"],
+      "dependsOn": ["connection-management", "screenshot-handling"],
+      "verifyRun": true
+    },
+    {
+      "id": "readme",
+      "status": "pending",
+      "title": "Write README with quickstart",
+      "description": "Create README.md at project root. Sections: What is aslan-browser, Installation (build from source + pip install), Quickstart (Python code example), API Reference (all JSON-RPC methods), Architecture overview, Development. The quickstart should show the core agent workflow: navigate → a11y tree → fill → click → screenshot.",
+      "filesToCreate": ["README.md"],
+      "dependsOn": ["sdk-tests"],
+      "verifyBuild": false
+    },
+    {
+      "id": "benchmarks",
+      "status": "pending",
+      "title": "Create performance benchmarks",
+      "description": "Create benchmarks/benchmark.py. Measure: JS eval round-trip (1000x evaluate('1+1')), screenshot latency (100x screenshot), navigation + idle time, a11y tree extraction time on a complex local HTML page. Compare against targets from PRD: <2ms JS eval, <30ms screenshot, <50ms a11y tree. Output results as a formatted table. Create benchmarks/complex_page.html as a test fixture with many interactive elements.",
+      "filesToCreate": ["benchmarks/benchmark.py", "benchmarks/complex_page.html"],
+      "dependsOn": ["sdk-tests"],
+      "verifyRun": true
+    }
+  ]
+}

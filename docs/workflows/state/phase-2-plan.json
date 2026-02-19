@@ -1,0 +1,88 @@
+{
+  "metadata": {
+    "phase": "2",
+    "name": "Socket Server",
+    "description": "SwiftNIO Unix socket listener, JSON-RPC 2.0 protocol, method routing",
+    "projectRoot": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser",
+    "sourceDir": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser",
+    "xcodeprojPath": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser.xcodeproj",
+    "scheme": "aslan-browser",
+    "socketPath": "/tmp/aslan-browser.sock",
+    "previousPhase": "1"
+  },
+  "workItems": [
+    {
+      "id": "add-swiftnio",
+      "status": "pending",
+      "title": "Add SwiftNIO SPM dependency",
+      "description": "MANUAL STEP: User must add swift-nio package via Xcode → File → Add Package Dependencies → https://github.com/apple/swift-nio.git (version 2.x). Add NIO, NIOCore, NIOPosix, NIOFoundationCompat to the aslan-browser target. Verify with a test import.",
+      "manual": true,
+      "verifyBuild": true
+    },
+    {
+      "id": "rpc-models",
+      "status": "pending",
+      "title": "Create JSON-RPC Codable models",
+      "description": "Create Models/RPCMessage.swift with Codable structs: RPCRequest (jsonrpc, id, method, params as AnyCodable), RPCResponse (jsonrpc, id, result/error), RPCError (code, message, data). Handle the fact that params and result can be any JSON type. Use JSONSerialization for flexible encoding/decoding rather than fighting Codable with Any types.",
+      "filesToCreate": ["Models/RPCMessage.swift"],
+      "dependsOn": ["add-swiftnio"],
+      "verifyBuild": true
+    },
+    {
+      "id": "socket-server",
+      "status": "pending",
+      "title": "Create SocketServer with SwiftNIO Unix socket",
+      "description": "Create SocketServer.swift. Use NIOPosix ServerBootstrap to listen on /tmp/aslan-browser.sock. Remove stale socket file on startup. Use LineBasedFrameDecoder for NDJSON framing. Each connected client gets a channel. SocketServer holds reference to MethodRouter for dispatching. Start server from AppDelegate after tab setup.",
+      "filesToCreate": ["SocketServer.swift"],
+      "dependsOn": ["rpc-models"],
+      "verifyBuild": true
+    },
+    {
+      "id": "json-rpc-handler",
+      "status": "pending",
+      "title": "Create JSON-RPC channel handler",
+      "description": "Create JSONRPCHandler.swift as a ChannelInboundHandler. Receives ByteBuffer lines from LineBasedFrameDecoder. Parses JSON-RPC request. Dispatches to MethodRouter. Writes JSON-RPC response back as a line. Handles parse errors with JSON-RPC error responses.",
+      "filesToCreate": ["JSONRPCHandler.swift"],
+      "dependsOn": ["rpc-models", "socket-server"],
+      "verifyBuild": true
+    },
+    {
+      "id": "method-router",
+      "status": "pending",
+      "title": "Create MethodRouter mapping methods to BrowserTab",
+      "description": "Create MethodRouter.swift. Takes a reference to BrowserTab (single tab for now — TabManager comes in Phase 5). Maps method strings to async functions: 'navigate' → tab.navigate, 'evaluate' → tab.evaluate, 'screenshot' → tab.screenshot, 'getTitle' → tab.getTitle, 'getURL' → tab.getURL. Returns result as [String: Any] dict. Throws for unknown methods.",
+      "filesToCreate": ["MethodRouter.swift"],
+      "dependsOn": ["rpc-models"],
+      "verifyBuild": true
+    },
+    {
+      "id": "wire-server",
+      "status": "pending",
+      "title": "Wire SocketServer into AppDelegate",
+      "description": "Update AppDelegate to create SocketServer with MethodRouter after BrowserTab is ready. Remove the hardcoded smoke-test navigation from Phase 1. App now launches, creates a tab, starts listening on socket, and waits for JSON-RPC commands. Print socket path to stdout on startup.",
+      "filesToModify": ["AppDelegate.swift"],
+      "dependsOn": ["socket-server", "json-rpc-handler", "method-router"],
+      "verifyBuild": true
+    },
+    {
+      "id": "error-handling",
+      "status": "pending",
+      "title": "Implement error handling for all failure modes",
+      "description": "Create BrowserError enum (tabNotFound, javascriptError, navigationError, timeout, invalidParams). Map each to JSON-RPC error codes (-32000 through -32003). Handle in JSONRPCHandler: invalid JSON → -32700, missing method → -32601, bad params → -32602. Ensure errors never crash the server — always return JSON-RPC error response.",
+      "filesToCreate": ["Models/BrowserError.swift"],
+      "filesToModify": ["JSONRPCHandler.swift", "MethodRouter.swift"],
+      "dependsOn": ["wire-server"],
+      "verifyBuild": true
+    },
+    {
+      "id": "integration-test",
+      "status": "pending",
+      "title": "Integration test with socat/Python client",
+      "description": "Create tests/test_socket.py — a simple Python script that connects to /tmp/aslan-browser.sock, sends JSON-RPC requests (navigate, evaluate, screenshot, getTitle), and validates responses. Test: valid requests return results, invalid method returns error, bad JSON returns parse error. Run the app first, then the test script.",
+      "filesToCreate": ["tests/test_socket.py"],
+      "dependsOn": ["error-handling"],
+      "verifyBuild": true,
+      "verifyRun": true
+    }
+  ]
+}

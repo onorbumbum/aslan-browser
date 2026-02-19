@@ -1,0 +1,112 @@
+{
+  "metadata": {
+    "phase": "1",
+    "name": "Skeleton",
+    "description": "AppKit lifecycle, BrowserTab with WKWebView, navigate, evaluate, screenshot",
+    "projectRoot": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser",
+    "sourceDir": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser",
+    "xcodeprojPath": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser.xcodeproj",
+    "scheme": "aslan-browser",
+    "previousPhase": null
+  },
+  "workItems": [
+    {
+      "id": "setup-appkit",
+      "status": "done",
+      "title": "Strip SwiftUI/SwiftData, create AppKit lifecycle",
+      "description": "Remove aslan_browserApp.swift (SwiftUI @main), ContentView.swift, Item.swift. Create AppDelegate.swift with NSApplicationDelegate as @main. Remove SwiftUI and SwiftData imports. App should launch as a blank AppKit app.",
+      "filesToDelete": [
+        "aslan_browserApp.swift",
+        "ContentView.swift",
+        "Item.swift"
+      ],
+      "filesToCreate": [
+        "AppDelegate.swift"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "browser-tab",
+      "status": "done",
+      "title": "Create BrowserTab with WKWebView + NSWindow",
+      "description": "Create BrowserTab class (@MainActor) that owns one WKWebView and one NSWindow. Window is 1440x900. Visible by default. WKWebView fills the window. Basic WKWebViewConfiguration with allowsContentJavaScript. No navigation or JS eval yet — just the container.",
+      "filesToCreate": [
+        "BrowserTab.swift"
+      ],
+      "dependsOn": [
+        "setup-appkit"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "navigate",
+      "status": "done",
+      "title": "Implement navigate(url) with WKNavigationDelegate",
+      "description": "Add navigate(to:) async method on BrowserTab. Use CheckedContinuation wrapping WKNavigationDelegate didFinish/didFail callbacks. Return NavigationResult with url and title. Handle navigation errors by throwing.",
+      "filesToModify": [
+        "BrowserTab.swift"
+      ],
+      "dependsOn": [
+        "browser-tab"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "evaluate",
+      "status": "done",
+      "title": "Implement evaluate(script) with callAsyncJavaScript",
+      "description": "Add evaluate(_:args:) async method on BrowserTab. Use callAsyncJavaScript with .page content world. Pass arguments as dictionary. Return Any? result. Handle JS errors by throwing.",
+      "filesToModify": [
+        "BrowserTab.swift"
+      ],
+      "dependsOn": [
+        "browser-tab"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "screenshot",
+      "status": "done",
+      "title": "Implement screenshot with takeSnapshot + JPEG + base64",
+      "description": "Add screenshot(quality:width:) async method on BrowserTab. Use WKSnapshotConfiguration for width. takeSnapshot → NSBitmapImageRep → JPEG data → base64 string. Quality 0-100, default 70. Encode JPEG off main thread if possible.",
+      "filesToModify": [
+        "BrowserTab.swift"
+      ],
+      "dependsOn": [
+        "browser-tab"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "hidden-flag",
+      "status": "done",
+      "title": "Add --hidden launch argument support",
+      "description": "Parse CommandLine.arguments for --hidden flag. Pass visibility setting to BrowserTab. When hidden, use window.orderOut(nil). When visible, use window.makeKeyAndOrderFront(nil). Store as a property on AppDelegate that BrowserTab reads.",
+      "filesToModify": [
+        "AppDelegate.swift",
+        "BrowserTab.swift"
+      ],
+      "dependsOn": [
+        "browser-tab"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "smoke-test",
+      "status": "done",
+      "title": "End-to-end smoke test",
+      "description": "Wire everything together in AppDelegate.applicationDidFinishLaunching: create BrowserTab, navigate to https://example.com, wait 1 second, take screenshot, save JPEG to /tmp/aslan-screenshot.jpg, print title and URL to console. Verify by building and running the app.",
+      "filesToModify": [
+        "AppDelegate.swift"
+      ],
+      "dependsOn": [
+        "navigate",
+        "evaluate",
+        "screenshot",
+        "hidden-flag"
+      ],
+      "verifyBuild": true,
+      "verifyRun": true
+    }
+  ]
+}

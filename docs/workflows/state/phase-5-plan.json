@@ -1,0 +1,69 @@
+{
+  "metadata": {
+    "phase": "5",
+    "name": "Tab Management + Events",
+    "description": "Multi-tab support, event notifications, cookies, navigation history",
+    "projectRoot": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser",
+    "sourceDir": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser",
+    "xcodeprojPath": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser.xcodeproj",
+    "scheme": "aslan-browser",
+    "previousPhase": "4"
+  },
+  "workItems": [
+    {
+      "id": "tab-manager",
+      "status": "pending",
+      "title": "Create TabManager class",
+      "description": "Create TabManager.swift. @MainActor class that manages tabId (String) → BrowserTab map. Generates unique tabIds (e.g., 'tab0', 'tab1', ...). Creates a default tab on init. Methods: createTab(url:width:height:) → tabId, closeTab(tabId:), getTab(tabId:) throws, listTabs() → [TabInfo]. Update AppDelegate to use TabManager instead of holding a single BrowserTab. Update MethodRouter to take TabManager and resolve tabId from params for every method call.",
+      "filesToCreate": ["TabManager.swift", "Models/TabInfo.swift"],
+      "filesToModify": ["AppDelegate.swift", "MethodRouter.swift"],
+      "verifyBuild": true
+    },
+    {
+      "id": "tab-methods",
+      "status": "pending",
+      "title": "Wire tab.create, tab.close, tab.list JSON-RPC methods",
+      "description": "Add JSON-RPC methods: 'tab.create' → {tabId}, 'tab.close' → {ok: true}, 'tab.list' → {tabs: [{tabId, url, title}]}. tab.create accepts optional url, width, height params. tab.close removes tab from TabManager and cleans up window/webview. tab.list returns info for all active tabs.",
+      "filesToModify": ["MethodRouter.swift"],
+      "dependsOn": ["tab-manager"],
+      "verifyBuild": true
+    },
+    {
+      "id": "event-notifications",
+      "status": "pending",
+      "title": "Implement event notification system",
+      "description": "Add an event emitter to BrowserTab that collects events. SocketServer tracks connected client channels. When BrowserTab produces an event, send a JSON-RPC notification (no id) to all connected clients. Events: 'event.navigation' (url change), 'event.console' (console.log/warn/error), 'event.error' (JS errors). For console capture, add WKScriptMessageHandler or override console methods in ScriptBridge JS.",
+      "filesToModify": ["BrowserTab.swift", "ScriptBridge.swift", "SocketServer.swift", "JSONRPCHandler.swift"],
+      "dependsOn": ["tab-manager"],
+      "verifyBuild": true
+    },
+    {
+      "id": "cookies",
+      "status": "pending",
+      "title": "Implement cookie get/set via WKHTTPCookieStore",
+      "description": "Add getCookies(url:) and setCookie(cookie:) async methods on BrowserTab. Use WKWebsiteDataStore.default().httpCookieStore. getCookies returns array of cookie dicts (name, value, domain, path, expires). setCookie accepts cookie dict and awaits completion before returning. Wire as JSON-RPC methods 'getCookies' and 'setCookie'. CRITICAL: setCookie must await completion — do not return before the cookie is set.",
+      "filesToModify": ["BrowserTab.swift", "MethodRouter.swift"],
+      "dependsOn": ["tab-manager"],
+      "verifyBuild": true
+    },
+    {
+      "id": "navigation-history",
+      "status": "pending",
+      "title": "Implement goBack, goForward, reload",
+      "description": "Add goBack(), goForward(), reload() async methods on BrowserTab. Each wraps the corresponding WKWebView method and waits for navigation to complete (reuse the navigation continuation pattern). Wire as JSON-RPC methods 'goBack', 'goForward', 'reload' in MethodRouter. Return {url, title} after navigation completes.",
+      "filesToModify": ["BrowserTab.swift", "MethodRouter.swift"],
+      "dependsOn": ["tab-manager"],
+      "verifyBuild": true
+    },
+    {
+      "id": "integration-test-v2",
+      "status": "pending",
+      "title": "Update integration test for multi-tab and events",
+      "description": "Update tests/test_socket.py to test: create multiple tabs, navigate each, get a11y tree, click/fill by ref, list tabs, close tab, verify events are received. This is the comprehensive integration test for the full API surface through Phase 5.",
+      "filesToModify": ["tests/test_socket.py"],
+      "dependsOn": ["tab-methods", "event-notifications", "cookies", "navigation-history"],
+      "verifyBuild": false,
+      "verifyRun": true
+    }
+  ]
+}
