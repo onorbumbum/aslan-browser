@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/logo.png" width="180" alt="Aslan Browser logo — lion paw on dark blue">
+  <img src="assets/logo.png" width="180" alt="Aslan Browser logo">
 </p>
 
 <h1 align="center">Aslan Browser</h1>
 
 <p align="center">
-  <strong>A native macOS browser built for AI agents.</strong><br>
-  WKWebView + Unix socket + JSON-RPC = fast, simple browser automation without Chrome or CDP.
+  A native macOS browser for AI agents.<br>
+  WKWebView + Unix socket + JSON-RPC.
 </p>
 
 <p align="center">
@@ -20,15 +20,15 @@
 
 ## Why Aslan?
 
-Existing browser automation (Puppeteer, Playwright, Selenium) wasn't built for AI agents. They're slow, heavy, and produce bloated DOM trees that burn tokens.
+Browser automation tools like Puppeteer, Playwright, and Selenium weren't designed with AI agents in mind. They ship a full Chrome, communicate over HTTP/CDP, and hand you the entire DOM when all your agent needs is "what's on the page and what can I click."
 
-Aslan Browser is different:
+Aslan wraps macOS's built-in WKWebView and exposes it over a Unix socket. No Chrome download. The Python SDK uses only stdlib. And instead of dumping raw DOM, it gives you an accessibility tree, which is 10-100x fewer tokens for the same page.
 
-- **🦁 Native macOS** — WKWebView, not Chrome. No 500MB browser download.
-- **⚡ Fast** — Sub-2ms JS eval, sub-30ms screenshots. Unix socket, not HTTP.
-- **🌳 Accessibility-tree-first** — 10–100× fewer tokens than raw DOM for the same page.
-- **🐍 Zero-dependency Python SDK** — Only stdlib (`socket`, `json`, `asyncio`, `base64`).
-- **🔌 Simple protocol** — NDJSON JSON-RPC 2.0. Build a client in any language in an afternoon.
+- **Native macOS.** WKWebView, not Chrome. No 500MB browser download.
+- **Fast.** Sub-2ms JS eval, sub-30ms screenshots. Unix socket, not HTTP.
+- **Accessibility-tree-first.** 10-100x fewer tokens than raw DOM for the same page.
+- **Zero-dependency Python SDK.** Only stdlib (`socket`, `json`, `asyncio`, `base64`).
+- **Simple protocol.** NDJSON JSON-RPC 2.0. You can build a client in any language.
 
 ---
 
@@ -58,7 +58,7 @@ with AslanBrowser() as browser:
     # Navigate and wait for the page to be ready
     browser.navigate("https://github.com/login", wait_until="idle")
 
-    # Get the accessibility tree — this is what you send to the LLM
+    # Get the accessibility tree (this is what you send to the LLM)
     tree = browser.get_accessibility_tree()
     for node in tree:
         print(f"{node['ref']} {node['role']} \"{node['name']}\"")
@@ -75,7 +75,7 @@ with AslanBrowser() as browser:
     browser.save_screenshot("page.jpg")
 ```
 
-That's it. Navigate, read the tree, act on refs.
+Navigate, read the tree, act on refs. The accessibility tree is the key idea here. Your agent gets a compact list of what's interactive on the page, each tagged with a ref like `@e0`, and uses those refs to click/fill/select.
 
 ---
 
@@ -123,7 +123,7 @@ pip install -e .
 .build/Build/Products/Debug/aslan-browser.app/Contents/MacOS/aslan-browser --hidden
 ```
 
-The app listens on `/tmp/aslan-browser.sock` — your Python code connects there automatically.
+The app listens on `/tmp/aslan-browser.sock`. Your Python code connects there automatically.
 
 **4. Verify it works**
 
@@ -141,13 +141,19 @@ with AslanBrowser() as b:
 
 Download the latest `.zip` from [**Releases**](https://github.com/onorbumbum/aslan-browser/releases).
 
+| Build | Architecture |
+|---|---|
+| `aslan-browser-macos-universal.zip` | **Universal (arm64 + x86_64)**, recommended |
+| `aslan-browser-macos-arm64.zip` | Apple Silicon only |
+| `aslan-browser-macos-x86_64.zip` | Intel only |
+
 ```bash
-# 1. Download and unzip
+# 1. Download and unzip (universal works on all Macs)
 curl -L -o aslan-browser.zip \
-  https://github.com/onorbumbum/aslan-browser/releases/latest/download/aslan-browser-macos-arm64.zip
+  https://github.com/onorbumbum/aslan-browser/releases/latest/download/aslan-browser-macos-universal.zip
 unzip aslan-browser.zip
 
-# 2. Allow the app (first run only — it's dev-signed, not notarized)
+# 2. Clear quarantine flag (first run only, dev-signed, not notarized)
 xattr -cr aslan-browser.app
 
 # 3. Start the browser
@@ -158,7 +164,7 @@ git clone https://github.com/onorbumbum/aslan-browser.git
 pip install -e aslan-browser/sdk/python
 ```
 
-> **Note:** This is an Apple Silicon (arm64) build. Requires macOS 15.0+.
+Requires macOS 15.0+ (Sequoia). The universal build runs natively on both Apple Silicon and Intel Macs.
 
 ---
 
@@ -215,9 +221,9 @@ browser = AslanBrowser(socket_path="/tmp/my-custom.sock")
 
 ## Usage Examples
 
-### 🌳 Agent Workflow: Read → Decide → Act
+### Agent Workflow
 
-The core loop for any AI agent:
+The core loop: read the page, let the LLM decide, act on its choice.
 
 ```python
 from aslan_browser import AslanBrowser
@@ -225,27 +231,27 @@ from aslan_browser import AslanBrowser
 with AslanBrowser() as browser:
     browser.navigate("https://news.ycombinator.com", wait_until="idle")
 
-    # 1. Read — get the accessibility tree
+    # 1. Read: get the accessibility tree
     tree = browser.get_accessibility_tree()
 
     # 2. Send to LLM (tree is a compact list of interactive elements)
     # Each node: {"ref": "@e0", "role": "link", "name": "Show HN: ...", "rect": {...}}
 
-    # 3. Act — use the ref the LLM picks
+    # 3. Act: use the ref the LLM picks
     browser.click("@e5")  # click the 5th element
 ```
 
-### 📸 Screenshot for Vision Models
+### Screenshots
 
 ```python
-# JPEG bytes — send directly to GPT-4V, Claude, etc.
+# JPEG bytes, send directly to GPT-4V, Claude, etc.
 jpeg_bytes = browser.screenshot(quality=70)
 
 # Or save to disk
 browser.save_screenshot("page.jpg", quality=85, width=1440)
 ```
 
-### 🗂️ Multi-Tab Browsing
+### Multi-Tab
 
 ```python
 with AslanBrowser() as browser:
@@ -266,9 +272,9 @@ with AslanBrowser() as browser:
     browser.tab_close(tab2)
 ```
 
-### 🚀 Batch Operations (Multi-Agent)
+### Batch Operations
 
-Execute multiple operations in a single round-trip:
+Multiple operations in a single round-trip. Useful when you have several agents or tabs going at once.
 
 ```python
 with AslanBrowser() as browser:
@@ -288,26 +294,24 @@ with AslanBrowser() as browser:
     screenshots = browser.parallel_screenshots([tab1, tab2])
 ```
 
-### 🔑 Sessions (Agent Isolation)
+### Sessions
+
+Sessions let you isolate tabs for different agents. Destroying a session closes all its tabs.
 
 ```python
 with AslanBrowser() as browser:
-    # Create isolated sessions for different agents
     session1 = browser.session_create(name="agent-research")
     session2 = browser.session_create(name="agent-shopping")
 
-    # Tabs belong to sessions
     tab_a = browser.tab_create(url="https://google.com", session_id=session1)
     tab_b = browser.tab_create(url="https://amazon.com", session_id=session2)
 
-    # List tabs for a session
     research_tabs = browser.tab_list(session_id=session1)
 
-    # Destroy session → closes all its tabs
     browser.session_destroy(session1)
 ```
 
-### 🍪 Cookie Management
+### Cookies
 
 ```python
 with AslanBrowser() as browser:
@@ -323,16 +327,13 @@ with AslanBrowser() as browser:
     cookies = browser.get_cookies(url="https://example.com")
 ```
 
-### ⌨️ Keyboard & Forms
+### Keyboard and Forms
 
 ```python
 with AslanBrowser() as browser:
     browser.navigate("https://example.com/search")
 
-    # Fill a form field
     browser.fill("@e1", "search query")
-
-    # Press Enter
     browser.keypress("Enter")
 
     # Keyboard shortcuts
@@ -345,13 +346,12 @@ with AslanBrowser() as browser:
     browser.scroll(x=0, y=500)  # scroll down 500px
 ```
 
-### 🔧 Direct JavaScript
+### Direct JavaScript
 
 ```python
 with AslanBrowser() as browser:
     browser.navigate("https://example.com")
 
-    # Evaluate JS and get the result
     count = browser.evaluate("return document.querySelectorAll('a').length")
     print(f"Found {count} links")
 
@@ -465,25 +465,21 @@ Use `ref` values (`@e0`, `@e1`, ...) in `click()`, `fill()`, etc.
                                        └──────────────────────────────────────┘
 ```
 
-### Key Design Decisions
+### Design Decisions
 
 | Decision | Choice | Why |
 |---|---|---|
-| Rendering engine | **WKWebView** | macOS native, no Chrome dependency, full JS/WebSocket support |
-| Server | **SwiftNIO + Unix socket** | ~30% faster than TCP for local IPC, no port conflicts |
-| Protocol | **NDJSON JSON-RPC 2.0** | Language-agnostic, simple, one message per line |
-| Window strategy | **Hidden NSWindow per tab** | Invisible but in window hierarchy so JS/WebSockets work normally |
-| Page representation | **Accessibility tree** | 10–100× fewer tokens than raw DOM for equivalent information |
+| Rendering engine | WKWebView | macOS native, no Chrome dependency, full JS/WebSocket support |
+| Server | SwiftNIO + Unix socket | ~30% faster than TCP for local IPC, no port conflicts |
+| Protocol | NDJSON JSON-RPC 2.0 | Language-agnostic, one message per line |
+| Window strategy | Hidden NSWindow per tab | Invisible but in window hierarchy so JS/WebSockets work normally |
+| Page representation | Accessibility tree | 10-100x fewer tokens than raw DOM |
 
 ### How the Accessibility Tree Works
 
-The injected JavaScript (`ScriptBridge.swift`) walks the DOM and produces a flat list of interactive/semantic elements:
+Injected JavaScript (`ScriptBridge.swift`) walks the DOM and produces a flat list of interactive and semantic elements. It traverses all visible elements, filters down to things you'd actually interact with (links, buttons, inputs, selects, ARIA landmarks), and assigns each a stable `@eN` ref. Elements get tagged with `data-agent-ref` attributes so `click`/`fill` can find them later.
 
-1. **Traverses** all visible DOM elements
-2. **Filters** to interactive elements (links, buttons, inputs, selects) + ARIA landmarks
-3. **Assigns** stable `@eN` refs and tags elements with `data-agent-ref` attributes
-4. **Resolves** names via: `aria-label` → `aria-labelledby` → `<label>` → `placeholder` → `title` → `textContent`
-5. **Includes** bounding rects for spatial reasoning
+Names are resolved by checking `aria-label`, then `aria-labelledby`, then `<label>`, `placeholder`, `title`, and finally visible text content (truncated at 80 chars). Bounding rects are included for spatial reasoning.
 
 When you call `click("@e3")`, the browser finds the element with `data-agent-ref="@e3"` and dispatches the event.
 
@@ -491,7 +487,7 @@ When you call `click("@e3")`, the browser finds the element with `data-agent-ref
 
 ## Performance
 
-Benchmarked on Apple Silicon (M-series). Run benchmarks yourself:
+Benchmarked on Apple Silicon (M-series). Run them yourself:
 
 ```bash
 # Start the app first, then:
@@ -509,11 +505,11 @@ python3 benchmarks/benchmark.py
 
 | Operation | Aslan Browser | Puppeteer + Chrome |
 |---|---|---|
-| JS eval round-trip | ~0.5ms | 2–5ms |
-| Screenshot | ~15ms | 50–150ms |
-| Memory per tab | ~40MB | ~80–150MB |
-| Cold start | < 500ms | 2–5s |
-| Page representation | A11y tree (compact) | Full DOM (bloated) |
+| JS eval round-trip | ~0.5ms | 2-5ms |
+| Screenshot | ~15ms | 50-150ms |
+| Memory per tab | ~40MB | ~80-150MB |
+| Cold start | < 500ms | 2-5s |
+| Page representation | A11y tree (compact) | Full DOM |
 
 ---
 
@@ -527,36 +523,36 @@ aslan-browser/
 │   ├── TabManager.swift        # Tab lifecycle, session management
 │   ├── SocketServer.swift      # SwiftNIO Unix socket listener
 │   ├── JSONRPCHandler.swift    # JSON-RPC 2.0 parser + response builder
-│   ├── MethodRouter.swift      # Maps JSON-RPC methods → BrowserTab calls
+│   ├── MethodRouter.swift      # Maps JSON-RPC methods to BrowserTab calls
 │   ├── ScriptBridge.swift      # Injected JS: a11y tree, readiness, interaction
 │   └── Models/
-│       ├── RPCMessage.swift    # JSON-RPC request/response types
-│       ├── A11yNode.swift      # Accessibility tree node
-│       ├── BrowserError.swift  # Error codes
-│       └── TabInfo.swift       # Tab metadata
+│       ├── RPCMessage.swift
+│       ├── A11yNode.swift
+│       ├── BrowserError.swift
+│       └── TabInfo.swift
 ├── sdk/
-│   └── python/                 # Python SDK
+│   └── python/
 │       ├── aslan_browser/
 │       │   ├── client.py       # Sync client
 │       │   └── async_client.py # Async client
 │       ├── tests/
 │       └── pyproject.toml
 ├── benchmarks/
-│   ├── benchmark.py            # Performance benchmarks
-│   └── complex_page.html       # Test page for benchmarking
+│   ├── benchmark.py
+│   └── complex_page.html
 ├── tests/                      # Integration tests
-├── docs/                       # Design docs & phase plans
-├── assets/                     # Logo and images
-└── aslan-browser.xcodeproj     # Xcode project
+├── docs/                       # Design docs and phase plans
+├── assets/
+└── aslan-browser.xcodeproj
 ```
 
-**~2,000 lines of Swift. ~600 lines of Python. Two external dependencies (SwiftNIO).**
+~2,000 lines of Swift, ~600 lines of Python. Two external dependencies (SwiftNIO).
 
 ---
 
 ## Development
 
-### Build & Run
+### Build and Run
 
 ```bash
 # Build
@@ -597,7 +593,7 @@ xcodebuild build \
 # .build/Build/Products/Release/aslan-browser.app
 ```
 
-To distribute the `.app` bundle, you can zip it:
+To distribute the `.app` bundle, zip it:
 
 ```bash
 cd .build/Build/Products/Release
@@ -628,11 +624,11 @@ rm -f /tmp/aslan-browser.sock
 
 ### Blank screenshots
 
-WKWebView requires a window hierarchy to render. Make sure you're using the app (not trying to run headless without it). The `--hidden` flag hides the window but keeps it in the hierarchy.
+WKWebView needs a window hierarchy to render. Make sure you're using the app, not trying to run headless without it. The `--hidden` flag hides the window but keeps it in the hierarchy.
 
 ### Sites detecting automation
 
-Aslan Browser uses a Chrome-compatible User-Agent string by default. Some sites may still detect automation. You can customize the User-Agent via:
+Aslan uses a Chrome-compatible User-Agent string by default. Some sites may still detect automation. You can set a custom one:
 
 ```python
 browser.evaluate("""
@@ -654,9 +650,9 @@ echo '{"jsonrpc":"2.0","id":1,"method":"navigate","params":{"tabId":"tab0","url"
   socat - UNIX-CONNECT:/tmp/aslan-browser.sock
 ```
 
-Every request is a single JSON line. Every response is a single JSON line. Notifications (events) are pushed as JSON lines without an `id` field.
+One JSON line per request. One JSON line per response. Notifications (events) come as JSON lines without an `id` field.
 
-See the [Python SDK source](sdk/python/aslan_browser/client.py) for a complete client implementation — it's under 300 lines with zero dependencies.
+The [Python SDK source](sdk/python/aslan_browser/client.py) is a complete client implementation in under 300 lines, no dependencies. Read it if you want to build a client in another language.
 
 ---
 
@@ -675,10 +671,4 @@ See the [Python SDK source](sdk/python/aslan_browser/client.py) for a complete c
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
-
----
-
-<p align="center">
-  <strong>Aslan</strong> — named after the lion. Fast, native, and built for agents. 🦁
-</p>
+MIT. See [LICENSE](LICENSE).
