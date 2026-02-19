@@ -27,6 +27,8 @@ class MethodRouter {
             return try await handleGetTitle()
         case "getURL":
             return try await handleGetURL()
+        case "waitForSelector":
+            return try await handleWaitForSelector(params)
         default:
             throw RPCError.methodNotFound(method)
         }
@@ -39,7 +41,11 @@ class MethodRouter {
             throw RPCError.invalidParams("Missing required param: url")
         }
 
-        let result = try await tab.navigate(to: url)
+        let waitUntilStr = params?["waitUntil"] as? String ?? "load"
+        let waitUntil = BrowserTab.WaitUntil(rawValue: waitUntilStr) ?? .load
+        let timeout = params?["timeout"] as? Int ?? 30000
+
+        let result = try await tab.navigate(to: url, waitUntil: waitUntil, timeout: timeout)
         return ["url": result.url, "title": result.title]
     }
 
@@ -74,5 +80,16 @@ class MethodRouter {
     private func handleGetURL() async throws -> [String: Any] {
         let url = tab.webView.url?.absoluteString ?? ""
         return ["url": url]
+    }
+
+    private func handleWaitForSelector(_ params: [String: Any]?) async throws -> [String: Any] {
+        guard let selector = params?["selector"] as? String else {
+            throw RPCError.invalidParams("Missing required param: selector")
+        }
+
+        let timeout = params?["timeout"] as? Int ?? 5000
+
+        try await tab.waitForSelector(selector, timeout: timeout)
+        return ["found": true]
     }
 }

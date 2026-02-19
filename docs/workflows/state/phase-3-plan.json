@@ -12,65 +12,98 @@
   "workItems": [
     {
       "id": "script-bridge-setup",
-      "status": "pending",
+      "status": "done",
       "title": "Create ScriptBridge with WKUserScript injection",
       "description": "Create ScriptBridge.swift with a static property 'injectedJS' that returns the complete JS source as a string. Start with a minimal bridge: window.__agent = {} namespace, a postMessage helper. Create WKUserScript with injectionTime .atDocumentEnd, forMainFrameOnly true. Update BrowserTab's WKWebViewConfiguration to add this user script.",
-      "filesToCreate": ["ScriptBridge.swift"],
-      "filesToModify": ["BrowserTab.swift"],
+      "filesToCreate": [
+        "ScriptBridge.swift"
+      ],
+      "filesToModify": [
+        "BrowserTab.swift"
+      ],
       "verifyBuild": true
     },
     {
       "id": "message-handler",
-      "status": "pending",
+      "status": "done",
       "title": "Set up WKScriptMessageHandler for page→Swift communication",
       "description": "Add WKScriptMessageHandler conformance to BrowserTab (or a dedicated handler class). Register on channel 'agent'. Handle incoming messages from page JS. Messages are JSON with a 'type' field for routing (e.g., 'readyState', 'domStable', 'networkIdle'). Log unrecognized message types.",
-      "filesToModify": ["BrowserTab.swift"],
-      "dependsOn": ["script-bridge-setup"],
+      "filesToModify": [
+        "BrowserTab.swift"
+      ],
+      "dependsOn": [
+        "script-bridge-setup"
+      ],
       "verifyBuild": true
     },
     {
       "id": "network-tracking",
-      "status": "pending",
+      "status": "done",
       "title": "Implement fetch/XHR monkey-patching for network tracking",
       "description": "Add JS to ScriptBridge that monkey-patches window.fetch and XMLHttpRequest.prototype.open/send. Track pending request count. When count transitions to 0, post 'networkIdle' message to Swift. When count transitions from 0, post 'networkBusy'. Preserve original function behavior — only observe, never modify requests.",
-      "filesToModify": ["ScriptBridge.swift"],
-      "dependsOn": ["script-bridge-setup"],
+      "filesToModify": [
+        "ScriptBridge.swift"
+      ],
+      "dependsOn": [
+        "script-bridge-setup"
+      ],
       "verifyBuild": true
     },
     {
       "id": "dom-stability",
-      "status": "pending",
+      "status": "done",
       "title": "Implement MutationObserver for DOM stability detection",
       "description": "Add JS to ScriptBridge that creates a MutationObserver on document.body watching childList, subtree, attributes. Use a debounce timer (configurable, default 500ms). When no mutations occur for the timeout duration, post 'domStable' message. Reset timer on each mutation. Start observing after document is ready.",
-      "filesToModify": ["ScriptBridge.swift"],
-      "dependsOn": ["script-bridge-setup"],
+      "filesToModify": [
+        "ScriptBridge.swift"
+      ],
+      "dependsOn": [
+        "script-bridge-setup"
+      ],
       "verifyBuild": true
     },
     {
       "id": "readiness-detection",
-      "status": "pending",
+      "status": "done",
       "title": "Implement combined readiness check in Swift",
       "description": "Add readiness tracking state to BrowserTab: didFinishNavigation (from WKNavigationDelegate), domStable (from MutationObserver message), networkIdle (from fetch/XHR tracker message), readyStateComplete (from evaluating document.readyState). Add waitForIdle() async method that waits until all 4 conditions are met, with a configurable timeout. Reset all signals on new navigation start.",
-      "filesToModify": ["BrowserTab.swift"],
-      "dependsOn": ["message-handler", "network-tracking", "dom-stability"],
+      "filesToModify": [
+        "BrowserTab.swift"
+      ],
+      "dependsOn": [
+        "message-handler",
+        "network-tracking",
+        "dom-stability"
+      ],
       "verifyBuild": true
     },
     {
       "id": "navigate-wait-until",
-      "status": "pending",
+      "status": "done",
       "title": "Wire waitUntil parameter into navigate",
       "description": "Update navigate() to accept a waitUntil parameter: 'none' (return immediately after load starts), 'load' (wait for didFinish only), 'idle' (wait for all 4 readiness conditions). Default to 'load'. Update MethodRouter to pass waitUntil from JSON-RPC params. Update the navigate JSON-RPC method signature.",
-      "filesToModify": ["BrowserTab.swift", "MethodRouter.swift"],
-      "dependsOn": ["readiness-detection"],
+      "filesToModify": [
+        "BrowserTab.swift",
+        "MethodRouter.swift"
+      ],
+      "dependsOn": [
+        "readiness-detection"
+      ],
       "verifyBuild": true
     },
     {
       "id": "wait-for-selector",
-      "status": "pending",
+      "status": "done",
       "title": "Implement waitForSelector method",
       "description": "Add JS to ScriptBridge: window.__agent.waitForSelector(selector, timeoutMs) that uses MutationObserver to watch for an element matching the CSS selector. Resolves when found, rejects on timeout. Add waitForSelector(selector:timeout:) async method on BrowserTab that evaluates this JS via callAsyncJavaScript. Wire as JSON-RPC method 'waitForSelector' in MethodRouter.",
-      "filesToModify": ["ScriptBridge.swift", "BrowserTab.swift", "MethodRouter.swift"],
-      "dependsOn": ["script-bridge-setup"],
+      "filesToModify": [
+        "ScriptBridge.swift",
+        "BrowserTab.swift",
+        "MethodRouter.swift"
+      ],
+      "dependsOn": [
+        "script-bridge-setup"
+      ],
       "verifyBuild": true
     }
   ]

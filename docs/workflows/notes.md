@@ -63,3 +63,48 @@ Pipeline: `LineBasedFrameDecoder` → `JSONRPCHandler` → `MethodRouter` → `B
 - `aslan-browser/Models/RPCMessage.swift` — RPCRequest, RPCResponse, RPCErrorResponse, RPCError
 - `aslan-browser/Models/BrowserError.swift` — Domain error enum with RPC code mapping
 - `tests/test_socket.py` — Integration test (8 tests, all passing)
+
+---
+
+## Phase 3 — ScriptBridge + Readiness Detection
+
+**Status:** Complete ✅
+
+### Decisions
+
+1. **ScriptBridge as enum with static properties** — `ScriptBridge` is an enum (no instances) with a static `injectedJS` computed property and `makeUserScript()` factory. All JS is one monolithic IIFE string.
+
+2. **ScriptMessageHandler as separate class** — `WKScriptMessageHandler` conformance on a dedicated `ScriptMessageHandler` class (not BrowserTab directly) to avoid `nonisolated` conflicts. Uses a callback closure to forward to BrowserTab's `@MainActor` context.
+
+3. **Idle continuation tracking via Int IDs** — `CheckedContinuation` isn't `Equatable`, so `waitForIdle()` uses incrementing integer IDs as dictionary keys to track and remove individual continuations on timeout.
+
+4. **Network starts as idle** — `networkIdle` defaults to `true` since no requests are pending before the page starts loading. The fetch/XHR monkey-patches will set it to `false` when requests begin.
+
+### Discoveries
+
+1. **Script injection timing** — `WKUserScript` with `.atDocumentEnd` runs after the DOM is parsed but before all subresources (images, fonts) finish loading. This is the right timing: the bridge is available for MutationObserver setup and network tracking before the page's own JS runs heavy async work.
+
+2. **MutationObserver auto-starts** — The DOM stability observer starts immediately when the script injects. The initial debounce timer fires after 500ms of quiet, which for simple pages means `domStable` is posted shortly after load.
+
+3. **`waitForSelector` uses `callAsyncJavaScript` Promise handling** — The JS function returns a Promise. `callAsyncJavaScript` natively awaits Promises, so the Swift side just awaits the result. On timeout, the Promise rejects, which becomes a thrown error in Swift.
+
+4. **`waitUntil: "idle"` re-fetches title** — After `waitForIdle()` completes, the title is re-read via `document.title` because SPAs may update the title after initial load.
+
+### Architecture
+
+ScriptBridge injects JS at document end into `window.__agent` namespace:
+- `post(type, data)` — sends messages to Swift via `webkit.messageHandlers.agent`
+- Network tracking — monkey-patched `fetch` and `XMLHttpRequest`, posts `networkIdle`/`networkBusy`
+- DOM stability — `MutationObserver` with configurable debounce (default 500ms), posts `domStable`
+- `waitForSelector(selector, timeoutMs)` — returns Promise, uses MutationObserver
+
+BrowserTab readiness state: `didFinishNavigation` + `domStable` + `networkIdle` + `readyStateComplete`
+
+JSON-RPC methods added: `waitForSelector`. Navigate updated with `waitUntil` param (`none`/`load`/`idle`).
+
+### Files Added
+- `aslan-browser/ScriptBridge.swift` — JS bridge source as Swift string literals
+
+### Files Modified
+- `aslan-browser/BrowserTab.swift` — User script injection, message handler, readiness tracking, waitForIdle, waitForSelector, navigate waitUntil
+- `aslan-browser/MethodRouter.swift` — waitForSelector method, navigate waitUntil/timeout params
