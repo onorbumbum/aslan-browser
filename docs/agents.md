@@ -66,32 +66,64 @@ Every time you make changes to the Swift source:
 
 Determine the appropriate bump level (patch/minor/major) based on the changes.
 
-### 2. Build
+### 2. Build universal binary
+
+Build a single universal binary (arm64 + x86_64) for all Macs:
 
 ```bash
 cd /Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser
-xcodebuild -project aslan-browser.xcodeproj -scheme aslan-browser -configuration Release clean build 2>&1 | tail -15
+xcodebuild -project aslan-browser.xcodeproj -scheme aslan-browser \
+  -configuration Release ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO build \
+  2>&1 | grep -E "error:|BUILD SUCCEEDED|BUILD FAILED"
 ```
 
 Confirm `** BUILD SUCCEEDED **` before proceeding.
 
-### 3. Install to /Applications (optional but recommended)
+Verify it's universal:
+```bash
+DERIVED="$HOME/Library/Developer/Xcode/DerivedData/aslan-browser-*/Build/Products/Release"
+lipo -info $DERIVED/aslan-browser.app/Contents/MacOS/aslan-browser
+# Should show: x86_64 arm64
+```
+
+### 3. Install to /Applications
 
 ```bash
-DERIVED_DATA=~/Library/Developer/Xcode/DerivedData/aslan-browser-*/Build/Products/Release
+DERIVED="$HOME/Library/Developer/Xcode/DerivedData/aslan-browser-*/Build/Products/Release"
 rm -rf /Applications/aslan-browser.app
-cp -R $DERIVED_DATA/aslan-browser.app /Applications/
+cp -R $DERIVED/aslan-browser.app /Applications/
 ```
 
 ### 4. Commit and push
 
 ```bash
 git add -A
-git commit -m "Brief description of changes (vX.Y.Z)"
+git commit -m "Brief description of changes"
 git push
 ```
 
-Include the version number in the commit message.
+### 5. Create GitHub release with binary
+
+Package the universal binary and create a GitHub release:
+
+```bash
+# Package
+DERIVED="$HOME/Library/Developer/Xcode/DerivedData/aslan-browser-*/Build/Products/Release"
+cd $DERIVED
+ditto -c -k --sequesterRsrc --keepParent aslan-browser.app /tmp/aslan-browser-X.Y.Z-universal.zip
+
+# Create release (replace X.Y.Z and write appropriate notes)
+cd /Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser
+gh release create vX.Y.Z \
+  /tmp/aslan-browser-X.Y.Z-universal.zip \
+  --title "vX.Y.Z — Short Title" \
+  --notes "Release notes in markdown"
+```
+
+**Release notes should include:** what's new, download table, quick install snippet, requirements.
+See previous releases for format: `gh release view v1.1.0`
+
+**One binary only:** Ship `aslan-browser-X.Y.Z-universal.zip` (arm64 + x86_64). No separate arch-specific builds.
 
 ---
 
