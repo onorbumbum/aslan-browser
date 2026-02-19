@@ -2,14 +2,26 @@
 # Syncthing conflict files
 *.sync-conflict-*
 
+# Aslan skill — user-specific learnings (personal, not committed)
+.pi/skills/aslan-browser/learnings/user.md
+
 # Profiling
 *.profraw
 
 # Xcode build
 .build/
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# macOS
+.DS_Store
+**/.DS_Store
 
 # Python
 __pycache__/
 *.pyc
 *.egg-info/
 .pytest_cache/
+dist/
+*.egg
+.pi/

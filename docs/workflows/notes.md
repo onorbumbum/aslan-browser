@@ -391,3 +391,140 @@ Useful for interactive agent sessions where an LLM drives the browser step-by-st
 New JSON-RPC methods: `session.create`, `session.destroy`, `batch`
 Modified methods: `tab.create` (accepts `sessionId`), `tab.list` (accepts `sessionId` filter)
 New RPC error code: `-32004` (session not found)
+
+---
+
+## Phase 7 — Live Manual Test (2026-02-19)
+
+**Test:** Open Google, search "dentists in Arroyo Grande", open results in tabs using Phase 7 features.
+
+### Gotcha 1: `/Applications/` binary was stale — always launch from DerivedData after a phase
+
+The app in `/Applications/aslan-browser.app` was the pre-Phase-7 build. `session.create` and `batch` didn't exist on it. The Phase 7 binary lives at:
+
+```
+~/Library/Developer/Xcode/DerivedData/aslan-browser-*/Build/Products/Debug/aslan-browser.app
+```
+
+**Workflow for live testing after a build:**
+```bash
+pkill -x "aslan-browser"
+open "$DERIVED_DATA/Build/Products/Debug/aslan-browser.app"
+```
+
+Verify you're on the right binary by probing a Phase 7-only method immediately:
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"session.create","params":{}}' | nc -U /tmp/aslan-browser.sock
+```
+If it returns `methodNotFound`, you're on the old binary.
+
+**TODO:** The Release install step at end of each phase workflow should be enforced — copy to `/Applications/` so the installed version is never stale.
+
+---
+
+### Gotcha 2: `event.navigation` notifications interleave before RPC responses
+
+When `navigate` is called, the socket can emit an `event.navigation` notification *before* returning the actual JSON-RPC response. A naive reader that grabs the first line will return the notification, not the result.
+
+**Fix:** Read lines in a loop and match by `id` field. Skip any object without the expected `id`:
+
+```python
+def rpc(method, params=None, req_id=1):
+    ...
+    for line in lines:
+        obj = json.loads(line)
+        if obj.get('id') == req_id:   # ← match by id, skip events
+            return obj
+```
+
+This was documented in Phase 5 notes but easy to forget when writing quick one-off test scripts.
+
+---
+
+### Gotcha 3: Multi-line JS in batch requests gets mangled — use heredocs or single-line scripts
+
+Embedding multi-line JavaScript inside a Python f-string and sending it through JSON causes escape sequences to break. A complex JS block with `\n`, backslashes, and embedded quotes will produce `-32001 JavaScript error` silently.
+
+**Broken pattern:**
+```python
+js = '''
+var clone = body.cloneNode(true);
+clone.querySelectorAll('script').forEach(el => el.remove());
+return clone.innerText.replace(/[ \t]+/g, ' ');
+'''
+requests = [{'method': 'evaluate', 'params': {'script': js}}]
+```
+
+**Working patterns:**
+
+Option A — single-line script (preferred for batch):
+```python
+script = "return document.body.innerText.replace(/[ \\t]+/g,' ').substring(0,4000)"
+```
+
+Option B — Python heredoc with `<< 'PYEOF'` for the whole script, avoiding any f-string interpolation:
+```bash
+python3 << 'PYEOF'
+js = "return document.body.innerText.substring(0,3000)"
+PYEOF
+```
+
+**Rule:** Keep `evaluate` scripts single-line when embedding in batch requests. Reserve multi-line scripts for standalone `evaluate` calls where escaping is easier to control.
+
+---
+
+### Gotcha 4: ATS blocks `http://` URLs — always retry with `https://`
+
+macOS App Transport Security (ATS) is enforced even with sandbox disabled. Any URL with a plain `http://` scheme returns:
+
+```
+Navigation error: The resource could not be loaded because the App Transport Security
+policy requires the use of a secure connection.
+```
+
+Google's local pack sometimes surfaces dental practice sites that are still on HTTP (small local businesses). Two of the five result tabs failed for this reason.
+
+**Fix:** Before navigating, normalize URLs:
+```python
+if url.startswith('http://'):
+    url = 'https://' + url[7:]
+```
+
+Or handle the `-32002` error and retry with `https://`. Both work. The retry approach is more accurate because some `http://` sites don't have a working HTTPS version.
+
+**TODO:** Consider adding automatic HTTP→HTTPS upgrade in `BrowserTab.navigate()` before issuing the request, with a fallback to the original `http://` if `https://` fails.
+
+---
+
+### Gotcha 5: Google `#:~:text=` fragment links create duplicate tabs
+
+Google search results include "Read more" links that use text fragment anchors: `https://example.com/#:~:text=some+snippet`. These point to the same page as the canonical result link but with a fragment. Scraping all `<a href>` tags from the SERP without deduplication produces pairs like:
+
+- `https://perrypateldds.com/`  ← canonical
+- `https://perrypateldds.com/#:~:text=Conveniently+located...` ← duplicate
+
+**Fix:** Deduplicate by stripping fragments before comparing:
+```python
+# In the JS scraper
+if (href.includes('#:~:text=')) continue;  // skip text fragments entirely
+```
+
+Or in Python:
+```python
+from urllib.parse import urldefrag
+canonical, _ = urldefrag(url)
+```
+
+---
+
+### Learning: `batch` + `session` is the right pattern for multi-tab research
+
+The full dentist search flow demonstrated the Phase 7 design working end-to-end:
+
+1. `session.create` → isolates all result tabs under one session ID
+2. `tab.create` × N with `sessionId` → tabs tagged to session
+3. `batch` navigate → all N tabs loaded in **one socket round-trip**
+4. `batch` evaluate → all N pages read in **one socket round-trip**
+5. `tab.list(sessionId)` → confirms only the right tabs are in scope
+
+Total socket calls for opening + reading 6 dentist pages: **5 calls** (create session, scrape Google, create 6 tabs, batch navigate, batch read). Without batch that would be 14+ sequential calls.
