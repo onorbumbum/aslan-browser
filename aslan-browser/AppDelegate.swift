@@ -70,7 +70,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
-        appMenu.addItem(NSMenuItem(title: "About Aslan Browser", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: ""))
+        appMenu.addItem(NSMenuItem(title: "About Aslan Browser", action: #selector(showAboutPanel), keyEquivalent: ""))
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: "Quit Aslan Browser", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appMenuItem.submenu = appMenu
@@ -90,5 +90,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.mainMenu = mainMenu
         NSLog("[aslan-browser] Main menu set with \(NSApp.mainMenu?.items.count ?? 0) items")
+    }
+
+    @objc private func showAboutPanel() {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
+
+        NSApplication.shared.orderFrontStandardAboutPanel(options: [
+            .applicationName: "Aslan Browser",
+            .applicationVersion: version,
+            .version: "Build \(build)",
+            .credits: NSAttributedString(
+                string: "AI-powered browser for ASLAN\n© 2025 Uzunu",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 11),
+                    .foregroundColor: NSColor.secondaryLabelColor
+                ]
+            )
+        ])
     }
 }
