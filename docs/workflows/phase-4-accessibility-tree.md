@@ -222,3 +222,10 @@ echo '{"jsonrpc":"2.0","id":3,"method":"click","params":{"tabId":"tab0","selecto
    ```
 
 4. Summarize and add to `notes.md`.
+
+5. **Commit all changes** (see conventions.md §8):
+   ```bash
+   git add -A
+   git status  # verify no junk files
+   git commit -m "Phase 4: Accessibility tree extraction"
+   ```

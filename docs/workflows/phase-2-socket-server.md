@@ -225,3 +225,10 @@ python3 tests/test_socket.py
 3. Summarize what was built and any notes added.
 
 4. Add to `notes.md`: "Phase 2 complete. Socket server running on /tmp/aslan-browser.sock. JSON-RPC methods: navigate, evaluate, screenshot, getTitle, getURL."
+
+5. **Commit all changes** (see conventions.md §8):
+   ```bash
+   git add -A
+   git status  # verify no junk files
+   git commit -m "Phase 2: Socket server with JSON-RPC 2.0 over Unix socket"
+   ```

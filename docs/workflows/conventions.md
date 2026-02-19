@@ -268,7 +268,16 @@ let base64 = jpegData.base64EncodedString()
 
 ---
 
-## 8. Design Principles
+## 8. Git Workflow
+
+- **Always commit before stopping.** When a phase, work item batch, or session ends, commit all changes with a descriptive message summarizing what was done.
+- **Commit message format**: First line is a short summary. Body lists key changes, one per line with `-` prefix.
+- **Clean staging**: Do not commit generated files (`*.profraw`), sync-conflict files (`*.sync-conflict-*`), or other artifacts. Check `git status` before committing.
+- **One commit per phase** (or per logical batch if a phase spans sessions).
+
+---
+
+## 9. Design Principles
 
 - **KISS**: Simplest solution that works. No premature abstraction.
 - **YAGNI**: Don't build it until we need it. Features can be added later.

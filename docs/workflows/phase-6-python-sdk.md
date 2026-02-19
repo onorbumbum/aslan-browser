@@ -257,7 +257,14 @@ cd sdk/python && pip install -e .
 
 4. Add to `notes.md`: "Phase 6 complete. All 6 phases done. aslan-browser is fully operational."
 
-5. Summarize the entire project:
+5. **Commit all changes** (see conventions.md §8):
+   ```bash
+   git add -A
+   git status  # verify no junk files
+   git commit -m "Phase 6: Python SDK with sync and async clients"
+   ```
+
+6. Summarize the entire project:
    - What was built across all phases
    - Performance benchmark results
    - Known limitations

@@ -231,3 +231,10 @@ echo '{"jsonrpc":"2.0","id":3,"method":"tab.close","params":{"tabId":"tab1"}}' |
    - Events: console, navigation, error notifications
 
 3. Summarize and add to `notes.md`: "Phase 5 complete. Full API surface operational. Ready for Python SDK."
+
+4. **Commit all changes** (see conventions.md §8):
+   ```bash
+   git add -A
+   git status  # verify no junk files
+   git commit -m "Phase 5: Tab management and full API surface"
+   ```

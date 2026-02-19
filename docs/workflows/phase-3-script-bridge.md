@@ -199,3 +199,10 @@ echo '{"jsonrpc":"2.0","id":2,"method":"waitForSelector","params":{"tabId":"tab0
    - JS bridge doesn't break page functionality.
 
 3. Summarize and add to `notes.md`.
+
+4. **Commit all changes** (see conventions.md §8):
+   ```bash
+   git add -A
+   git status  # verify no junk files
+   git commit -m "Phase 3: Script bridge with DOM interaction and event forwarding"
+   ```
