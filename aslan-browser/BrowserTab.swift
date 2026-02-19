@@ -11,13 +11,6 @@ struct NavigationResult {
     let title: String
 }
 
-enum BrowserError: Error {
-    case navigationFailed(String)
-    case invalidURL(String)
-    case javaScriptError(String)
-    case screenshotFailed(String)
-}
-
 @MainActor
 class BrowserTab: NSObject, WKNavigationDelegate {
 

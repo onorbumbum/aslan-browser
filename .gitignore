@@ -1,0 +1,6 @@
+
+# Syncthing conflict files
+*.sync-conflict-*
+
+# Profiling
+*.profraw

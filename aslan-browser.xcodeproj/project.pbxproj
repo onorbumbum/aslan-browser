@@ -6,6 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		B93D56812F46D297007D8DDD /* NIO in Frameworks */ = {isa = PBXBuildFile; productRef = B93D56802F46D297007D8DDD /* NIO */; };
+		B93D56832F46D297007D8DDD /* NIOCore in Frameworks */ = {isa = PBXBuildFile; productRef = B93D56822F46D297007D8DDD /* NIOCore */; };
+		B93D56852F46D297007D8DDD /* NIOFoundationCompat in Frameworks */ = {isa = PBXBuildFile; productRef = B93D56842F46D297007D8DDD /* NIOFoundationCompat */; };
+		B93D56872F46D297007D8DDD /* NIOPosix in Frameworks */ = {isa = PBXBuildFile; productRef = B93D56862F46D297007D8DDD /* NIOPosix */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		B93D55912F46BF77007D8DDD /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -57,6 +64,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B93D56832F46D297007D8DDD /* NIOCore in Frameworks */,
+				B93D56872F46D297007D8DDD /* NIOPosix in Frameworks */,
+				B93D56852F46D297007D8DDD /* NIOFoundationCompat in Frameworks */,
+				B93D56812F46D297007D8DDD /* NIO in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,6 +130,10 @@
 			);
 			name = "aslan-browser";
 			packageProductDependencies = (
+				B93D56802F46D297007D8DDD /* NIO */,
+				B93D56822F46D297007D8DDD /* NIOCore */,
+				B93D56842F46D297007D8DDD /* NIOFoundationCompat */,
+				B93D56862F46D297007D8DDD /* NIOPosix */,
 			);
 			productName = "aslan-browser";
 			productReference = B93D55812F46BF76007D8DDD /* aslan-browser.app */;
@@ -202,6 +217,9 @@
 			);
 			mainGroup = B93D55782F46BF76007D8DDD;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B93D567F2F46D297007D8DDD /* XCRemoteSwiftPackageReference "swift-nio" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B93D55822F46BF76007D8DDD /* Products */;
 			projectDirPath = "";
@@ -406,7 +424,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 53T3AP3735;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -440,7 +458,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 53T3AP3735;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -584,6 +602,40 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B93D567F2F46D297007D8DDD /* XCRemoteSwiftPackageReference "swift-nio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-nio.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.94.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B93D56802F46D297007D8DDD /* NIO */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B93D567F2F46D297007D8DDD /* XCRemoteSwiftPackageReference "swift-nio" */;
+			productName = NIO;
+		};
+		B93D56822F46D297007D8DDD /* NIOCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B93D567F2F46D297007D8DDD /* XCRemoteSwiftPackageReference "swift-nio" */;
+			productName = NIOCore;
+		};
+		B93D56842F46D297007D8DDD /* NIOFoundationCompat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B93D567F2F46D297007D8DDD /* XCRemoteSwiftPackageReference "swift-nio" */;
+			productName = NIOFoundationCompat;
+		};
+		B93D56862F46D297007D8DDD /* NIOPosix */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B93D567F2F46D297007D8DDD /* XCRemoteSwiftPackageReference "swift-nio" */;
+			productName = NIOPosix;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = B93D55792F46BF76007D8DDD /* Project object */;
 }

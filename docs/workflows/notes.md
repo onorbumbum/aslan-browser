@@ -22,8 +22,38 @@ Runtime discoveries, edge cases, and gotchas found during implementation. Update
 
 6. **Sync conflict files break builds** — Syncthing `.sync-conflict-*.swift` files get auto-included by `PBXFileSystemSynchronizedRootGroup`, causing duplicate type errors. Delete on sight. Consider adding a `.gitignore` or `.stignore` pattern.
 
-### Phase 2 Considerations
+---
 
-- **Sandbox vs Unix socket**: Must decide whether to disable sandbox, use a socket path inside the container, or add a sandbox exception. This is the first decision for Phase 2.
-- **Smoke test removal**: The `runSmokeTest()` method in AppDelegate should be replaced by socket server startup in Phase 2.
-- **`BrowserError` enum**: Already defined in `BrowserTab.swift` with cases `navigationFailed`, `invalidURL`, `javaScriptError`, `screenshotFailed`. Phase 2 will map these to JSON-RPC error codes.
+## Phase 2 — Socket Server
+
+**Status:** Complete ✅
+
+### Decisions
+
+1. **Sandbox disabled** — Set `ENABLE_APP_SANDBOX = NO` to allow Unix socket at `/tmp/aslan-browser.sock`. Sandbox remapped `/tmp/` to container-specific path, making the socket unreachable by external clients. Acceptable tradeoff for a local developer/agent tool.
+
+2. **Custom `LineBasedFrameDecoder`** — SwiftNIO's `LineBasedFrameDecoder` is in `swift-nio-extras`, not core `swift-nio`. Implemented a simple 20-line decoder in `SocketServer.swift` rather than adding another dependency. Follows YAGNI/minimal-deps convention.
+
+3. **`BrowserError` extracted to `Models/BrowserError.swift`** — Moved out of `BrowserTab.swift` into its own file. Added `tabNotFound` and `timeout` cases for future use. Each case maps to a JSON-RPC error code via `.rpcError` computed property.
+
+### Discoveries
+
+1. **NIO → MainActor dispatch pattern** — `JSONRPCHandler.channelRead` runs on the NIO event loop. Dispatches to `@MainActor` via `Task { @MainActor in ... }` for all `BrowserTab` calls. Response is written back via `context.eventLoop.execute { ... }` to return to the event loop for NIO writes.
+
+2. **`RPCParseError` vs `RPCError`** — Two distinct error types: `RPCParseError` for JSON parsing failures (thrown during `RPCRequest.parse`), `RPCError` for JSON-RPC protocol errors (thrown during routing/dispatch). `RPCParseError.invalidJSON` maps to `-32700`, `RPCParseError.invalidRequest` maps to `-32600`.
+
+3. **Socket cleanup** — `SocketServer.removeStaleSocket()` called on both startup and shutdown. `applicationWillTerminate` calls `socketServer?.stop()` for clean shutdown.
+
+### Architecture
+
+Socket server running on `/tmp/aslan-browser.sock`. JSON-RPC methods: `navigate`, `evaluate`, `screenshot`, `getTitle`, `getURL`.
+
+Pipeline: `LineBasedFrameDecoder` → `JSONRPCHandler` → `MethodRouter` → `BrowserTab`
+
+### Files Added
+- `aslan-browser/SocketServer.swift` — NIO Unix socket + LineBasedFrameDecoder
+- `aslan-browser/JSONRPCHandler.swift` — ChannelInboundHandler, JSON-RPC parse/dispatch
+- `aslan-browser/MethodRouter.swift` — Maps method names → BrowserTab calls
+- `aslan-browser/Models/RPCMessage.swift` — RPCRequest, RPCResponse, RPCErrorResponse, RPCError
+- `aslan-browser/Models/BrowserError.swift` — Domain error enum with RPC code mapping
+- `tests/test_socket.py` — Integration test (8 tests, all passing)
