@@ -94,7 +94,7 @@ That's it. Navigate, read the tree, act on refs.
 **1. Clone and build the macOS app**
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/aslan-browser.git
+git clone https://github.com/onorbumbum/aslan-browser.git
 cd aslan-browser
 
 # Build with Xcode
@@ -139,7 +139,7 @@ with AslanBrowser() as b:
 
 ### Option B: Download Pre-built Binary
 
-> **Coming soon** — Pre-built `.app` bundles will be available on the [Releases](https://github.com/YOUR_USERNAME/aslan-browser/releases) page.
+> **Coming soon** — Pre-built `.app` bundles will be available on the [Releases](https://github.com/onorbumbum/aslan-browser/releases) page.
 
 Once downloaded:
 
