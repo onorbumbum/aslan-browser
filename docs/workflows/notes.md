@@ -212,3 +212,37 @@ Full API surface complete:
 - `tests/test_socket.py` — 19 tests covering full API surface
 
 Phase 5 complete. Full API surface operational. Ready for Python SDK.
+
+---
+
+## Phase 6 — Python SDK + Polish
+
+**Status:** Complete ✅
+
+### Architecture
+
+- **Sync client** (`client.py`): `AslanBrowser` class using stdlib `socket` + `json`. Connects to Unix socket, sends NDJSON JSON-RPC, reads responses line-by-line skipping event notifications.
+- **Async client** (`async_client.py`): `AsyncAslanBrowser` using `asyncio.open_unix_connection`. Background read loop routes responses by request ID and dispatches notifications to optional event callback.
+- **Zero external dependencies**. Only Python stdlib.
+- **Context managers**: `with AslanBrowser()` / `async with AsyncAslanBrowser()`.
+- **Connection retry**: 3 attempts with 100ms/500ms/1000ms backoff.
+- **Screenshots return `bytes`**: Base64 decoding happens in the SDK.
+- **`AslanBrowserError(code, message)`** raised for all JSON-RPC errors.
+
+### Benchmark Results
+
+| Benchmark | Median | Target |
+|---|---|---|
+| JS eval round-trip | 0.13ms | <2ms ✓ |
+| Screenshot (1440w) | 2.47ms | <30ms ✓ |
+| Screenshot (800w) | 0.95ms | — |
+| A11y tree (simple) | 0.17ms | <50ms ✓ |
+| A11y tree (complex) | 2.73ms | <50ms ✓ |
+
+### Discoveries
+
+1. **pytest-asyncio strict mode requires `@pytest_asyncio.fixture`** — Async fixtures decorated with plain `@pytest.fixture` are passed as raw async generators. Must use `@pytest_asyncio.fixture` or set `asyncio_mode = "auto"` in pyproject.toml.
+
+2. **Each sync test gets a fresh socket connection** — Tests that share tab0 can interfere if a prior test's navigation is still in-flight when the new connection navigates. Fresh connections per test fixture avoid this.
+
+Phase 6 complete. All 6 phases done. aslan-browser is fully operational.

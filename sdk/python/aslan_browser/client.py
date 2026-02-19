@@ -1,0 +1,316 @@
+"""Synchronous Python client for aslan-browser."""
+
+from __future__ import annotations
+
+import base64
+import json
+import os
+import socket
+import time
+from typing import Any, Optional
+
+
+class AslanBrowserError(Exception):
+    """Error returned by aslan-browser JSON-RPC server."""
+
+    def __init__(self, code: int, message: str):
+        self.code = code
+        self.message = message
+        super().__init__(f"AslanBrowserError({code}): {message}")
+
+
+_DEFAULT_SOCKET = "/tmp/aslan-browser.sock"
+_RETRY_DELAYS = [0.1, 0.5, 1.0]
+
+
+class AslanBrowser:
+    """Synchronous client for aslan-browser.
+
+    Usage::
+
+        from aslan_browser import AslanBrowser
+
+        with AslanBrowser() as browser:
+            browser.navigate("https://example.com")
+            tree = browser.get_accessibility_tree()
+            browser.close()
+    """
+
+    def __init__(self, socket_path: str = _DEFAULT_SOCKET, *, auto_connect: bool = True):
+        self._socket_path = socket_path
+        self._sock: Optional[socket.socket] = None
+        self._file = None
+        self._next_id = 0
+        if auto_connect:
+            self.connect()
+
+    # ── connection management ────────────────────────────────────────
+
+    def connect(self) -> None:
+        """Connect to the aslan-browser Unix socket with retry."""
+        if self._sock is not None:
+            return
+
+        last_err: Optional[Exception] = None
+        for delay in _RETRY_DELAYS:
+            try:
+                if not os.path.exists(self._socket_path):
+                    raise ConnectionError(
+                        f"aslan-browser is not running. Socket not found at {self._socket_path}"
+                    )
+                sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                sock.connect(self._socket_path)
+                self._sock = sock
+                self._file = sock.makefile("rw", encoding="utf-8")
+                return
+            except (ConnectionError, OSError) as exc:
+                last_err = exc
+                time.sleep(delay)
+
+        raise ConnectionError(
+            f"Failed to connect to aslan-browser after {len(_RETRY_DELAYS)} attempts: {last_err}"
+        )
+
+    def close(self) -> None:
+        """Disconnect from the socket."""
+        if self._file:
+            try:
+                self._file.close()
+            except OSError:
+                pass
+            self._file = None
+        if self._sock:
+            try:
+                self._sock.close()
+            except OSError:
+                pass
+            self._sock = None
+
+    def __enter__(self) -> "AslanBrowser":
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        self.close()
+
+    # ── low-level RPC ────────────────────────────────────────────────
+
+    def _call(self, method: str, params: Optional[dict] = None) -> Any:
+        """Send a JSON-RPC request and return the result."""
+        if self._sock is None or self._file is None:
+            raise ConnectionError("Not connected. Call connect() first.")
+
+        self._next_id += 1
+        req_id = self._next_id
+        request = {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": method,
+            "params": params or {},
+        }
+        self._file.write(json.dumps(request) + "\n")
+        self._file.flush()
+
+        # Read lines, skipping event notifications (no id), until we get our response
+        while True:
+            line = self._file.readline()
+            if not line:
+                raise ConnectionError("Connection closed by aslan-browser.")
+            response = json.loads(line)
+            # Skip notifications (no id field)
+            if "id" not in response:
+                continue
+            if response["id"] == req_id:
+                if "error" in response:
+                    err = response["error"]
+                    raise AslanBrowserError(err["code"], err["message"])
+                return response.get("result")
+
+    # ── navigation ───────────────────────────────────────────────────
+
+    def navigate(
+        self,
+        url: str,
+        tab_id: str = "tab0",
+        wait_until: str = "load",
+        timeout: int = 30000,
+    ) -> dict:
+        """Navigate to a URL. Returns {"url": ..., "title": ...}."""
+        return self._call(
+            "navigate",
+            {"tabId": tab_id, "url": url, "waitUntil": wait_until, "timeout": timeout},
+        )
+
+    def go_back(self, tab_id: str = "tab0") -> dict:
+        """Navigate back. Returns {"url": ..., "title": ...}."""
+        return self._call("goBack", {"tabId": tab_id})
+
+    def go_forward(self, tab_id: str = "tab0") -> dict:
+        """Navigate forward. Returns {"url": ..., "title": ...}."""
+        return self._call("goForward", {"tabId": tab_id})
+
+    def reload(self, tab_id: str = "tab0") -> dict:
+        """Reload the page. Returns {"url": ..., "title": ...}."""
+        return self._call("reload", {"tabId": tab_id})
+
+    def wait_for_selector(
+        self, selector: str, tab_id: str = "tab0", timeout: int = 5000
+    ) -> dict:
+        """Wait for a CSS selector to appear in the DOM."""
+        return self._call(
+            "waitForSelector",
+            {"tabId": tab_id, "selector": selector, "timeout": timeout},
+        )
+
+    # ── evaluation ───────────────────────────────────────────────────
+
+    def evaluate(
+        self, script: str, tab_id: str = "tab0", args: Optional[dict] = None
+    ) -> Any:
+        """Evaluate JavaScript and return the result value."""
+        params: dict[str, Any] = {"tabId": tab_id, "script": script}
+        if args:
+            params["args"] = args
+        result = self._call("evaluate", params)
+        return result.get("value") if result else None
+
+    # ── page info ────────────────────────────────────────────────────
+
+    def get_title(self, tab_id: str = "tab0") -> str:
+        """Get the page title."""
+        result = self._call("getTitle", {"tabId": tab_id})
+        return result.get("title", "")
+
+    def get_url(self, tab_id: str = "tab0") -> str:
+        """Get the current URL."""
+        result = self._call("getURL", {"tabId": tab_id})
+        return result.get("url", "")
+
+    # ── accessibility tree ───────────────────────────────────────────
+
+    def get_accessibility_tree(self, tab_id: str = "tab0") -> list[dict]:
+        """Extract the accessibility tree. Returns a list of A11yNode dicts."""
+        result = self._call("getAccessibilityTree", {"tabId": tab_id})
+        return result.get("tree", [])
+
+    # ── interaction ──────────────────────────────────────────────────
+
+    def click(self, target: str, tab_id: str = "tab0") -> None:
+        """Click an element by @eN ref or CSS selector."""
+        self._call("click", {"tabId": tab_id, "selector": target})
+
+    def fill(self, target: str, value: str, tab_id: str = "tab0") -> None:
+        """Fill an input element with a value."""
+        self._call("fill", {"tabId": tab_id, "selector": target, "value": value})
+
+    def select(self, target: str, value: str, tab_id: str = "tab0") -> None:
+        """Select an option in a <select> element."""
+        self._call("select", {"tabId": tab_id, "selector": target, "value": value})
+
+    def keypress(
+        self,
+        key: str,
+        tab_id: str = "tab0",
+        modifiers: Optional[dict[str, bool]] = None,
+    ) -> None:
+        """Send a keypress event."""
+        params: dict[str, Any] = {"tabId": tab_id, "key": key}
+        if modifiers:
+            params["modifiers"] = modifiers
+        self._call("keypress", params)
+
+    def scroll(
+        self,
+        x: float = 0,
+        y: float = 0,
+        target: Optional[str] = None,
+        tab_id: str = "tab0",
+    ) -> None:
+        """Scroll the page or a specific element."""
+        params: dict[str, Any] = {"tabId": tab_id, "x": x, "y": y}
+        if target:
+            params["selector"] = target
+        self._call("scroll", params)
+
+    # ── screenshots ──────────────────────────────────────────────────
+
+    def screenshot(
+        self, tab_id: str = "tab0", quality: int = 70, width: int = 1440
+    ) -> bytes:
+        """Take a screenshot. Returns JPEG bytes."""
+        result = self._call(
+            "screenshot", {"tabId": tab_id, "quality": quality, "width": width}
+        )
+        return base64.b64decode(result["data"])
+
+    def save_screenshot(
+        self,
+        path: str,
+        tab_id: str = "tab0",
+        quality: int = 70,
+        width: int = 1440,
+    ) -> int:
+        """Take a screenshot and save it to a file. Returns the file size in bytes."""
+        data = self.screenshot(tab_id=tab_id, quality=quality, width=width)
+        with open(path, "wb") as f:
+            f.write(data)
+        return len(data)
+
+    # ── cookies ──────────────────────────────────────────────────────
+
+    def get_cookies(
+        self, tab_id: str = "tab0", url: Optional[str] = None
+    ) -> list[dict]:
+        """Get cookies. Optionally filter by URL."""
+        params: dict[str, Any] = {"tabId": tab_id}
+        if url:
+            params["url"] = url
+        result = self._call("getCookies", params)
+        return result.get("cookies", [])
+
+    def set_cookie(
+        self,
+        name: str,
+        value: str,
+        domain: str,
+        path: str = "/",
+        expires: Optional[float] = None,
+        tab_id: str = "tab0",
+    ) -> None:
+        """Set a cookie."""
+        params: dict[str, Any] = {
+            "tabId": tab_id,
+            "name": name,
+            "value": value,
+            "domain": domain,
+            "path": path,
+        }
+        if expires is not None:
+            params["expires"] = expires
+        self._call("setCookie", params)
+
+    # ── tab management ───────────────────────────────────────────────
+
+    def tab_create(
+        self,
+        url: Optional[str] = None,
+        width: int = 1440,
+        height: int = 900,
+        hidden: Optional[bool] = None,
+    ) -> str:
+        """Create a new tab. Returns the tab ID."""
+        params: dict[str, Any] = {"width": width, "height": height}
+        if url:
+            params["url"] = url
+        if hidden is not None:
+            params["hidden"] = hidden
+        result = self._call("tab.create", params)
+        return result["tabId"]
+
+    def tab_close(self, tab_id: str) -> None:
+        """Close a tab."""
+        self._call("tab.close", {"tabId": tab_id})
+
+    def tab_list(self) -> list[dict]:
+        """List all open tabs."""
+        result = self._call("tab.list")
+        return result.get("tabs", [])

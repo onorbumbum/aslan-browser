@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Benchmark Complex Page</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .form-group { margin: 10px 0; }
+    label { display: inline-block; width: 120px; }
+    input, select, textarea { width: 200px; padding: 4px; }
+    button { padding: 8px 16px; margin: 4px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    nav a { margin: 0 10px; }
+    .card { border: 1px solid #ddd; padding: 16px; margin: 8px; display: inline-block; width: 200px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Complex Benchmark Page</h1>
+    <nav>
+      <a href="#home">Home</a>
+      <a href="#about">About</a>
+      <a href="#contact">Contact</a>
+      <a href="#settings">Settings</a>
+      <a href="#help">Help</a>
+    </nav>
+  </header>
+
+  <main>
+    <section>
+      <h2>Registration Form</h2>
+      <form id="registration">
+        <div class="form-group">
+          <label for="firstName">First Name</label>
+          <input type="text" id="firstName" name="firstName" placeholder="Enter first name">
+        </div>
+        <div class="form-group">
+          <label for="lastName">Last Name</label>
+          <input type="text" id="lastName" name="lastName" placeholder="Enter last name">
+        </div>
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" placeholder="user@example.com">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password">
+        </div>
+        <div class="form-group">
+          <label for="confirmPw">Confirm</label>
+          <input type="password" id="confirmPw" name="confirmPw">
+        </div>
+        <div class="form-group">
+          <label for="phone">Phone</label>
+          <input type="tel" id="phone" name="phone" placeholder="+1 (555) 000-0000">
+        </div>
+        <div class="form-group">
+          <label for="dob">Date of Birth</label>
+          <input type="date" id="dob" name="dob">
+        </div>
+        <div class="form-group">
+          <label for="country">Country</label>
+          <select id="country" name="country">
+            <option value="">Select...</option>
+            <option value="us">United States</option>
+            <option value="uk">United Kingdom</option>
+            <option value="ca">Canada</option>
+            <option value="au">Australia</option>
+            <option value="de">Germany</option>
+            <option value="fr">France</option>
+            <option value="jp">Japan</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="bio">Bio</label>
+          <textarea id="bio" name="bio" rows="3" placeholder="Tell us about yourself"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Gender</label>
+          <input type="radio" name="gender" value="male" id="male"> <label for="male">Male</label>
+          <input type="radio" name="gender" value="female" id="female"> <label for="female">Female</label>
+          <input type="radio" name="gender" value="other" id="other"> <label for="other">Other</label>
+        </div>
+        <div class="form-group">
+          <input type="checkbox" id="terms" name="terms"> <label for="terms">I agree to the Terms</label>
+        </div>
+        <div class="form-group">
+          <input type="checkbox" id="newsletter" name="newsletter"> <label for="newsletter">Subscribe to newsletter</label>
+        </div>
+        <button type="submit">Register</button>
+        <button type="reset">Reset</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Data Table</h2>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Cards</h2>
+      <div id="cards"></div>
+    </section>
+
+    <section>
+      <h2>Search</h2>
+      <input type="search" id="search" placeholder="Search...">
+      <button id="searchBtn">Search</button>
+      <div id="searchResults"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Benchmark Page. All rights reserved.</p>
+    <a href="#privacy">Privacy Policy</a> | <a href="#terms">Terms of Service</a>
+  </footer>
+
+  <script>
+    // Generate table rows
+    const tbody = document.getElementById('tableBody');
+    const roles = ['Admin', 'User', 'Editor', 'Viewer', 'Moderator'];
+    const statuses = ['Active', 'Inactive', 'Pending'];
+    for (let i = 1; i <= 50; i++) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i}</td>
+        <td>User ${i}</td>
+        <td>user${i}@example.com</td>
+        <td>${roles[i % roles.length]}</td>
+        <td>${statuses[i % statuses.length]}</td>
+        <td><button onclick="alert('Edit ${i}')">Edit</button> <button onclick="alert('Delete ${i}')">Delete</button></td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    // Generate cards
+    const cardsDiv = document.getElementById('cards');
+    for (let i = 1; i <= 20; i++) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h3>Item ${i}</h3>
+        <p>Description for item ${i}. This is a sample card.</p>
+        <a href="#item${i}">View Details</a>
+        <button>Add to Cart</button>
+      `;
+      cardsDiv.appendChild(card);
+    }
+  </script>
+</body>
+</html>

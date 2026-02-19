@@ -1,0 +1,361 @@
+"""Asynchronous Python client for aslan-browser."""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import json
+import os
+from typing import Any, Callable, Optional
+
+from aslan_browser.client import AslanBrowserError
+
+
+_DEFAULT_SOCKET = "/tmp/aslan-browser.sock"
+_RETRY_DELAYS = [0.1, 0.5, 1.0]
+
+
+class AsyncAslanBrowser:
+    """Async client for aslan-browser.
+
+    Usage::
+
+        from aslan_browser import AsyncAslanBrowser
+
+        async with AsyncAslanBrowser() as browser:
+            await browser.navigate("https://example.com")
+            tree = await browser.get_accessibility_tree()
+    """
+
+    def __init__(self, socket_path: str = _DEFAULT_SOCKET):
+        self._socket_path = socket_path
+        self._reader: Optional[asyncio.StreamReader] = None
+        self._writer: Optional[asyncio.StreamWriter] = None
+        self._next_id = 0
+        self._pending: dict[int, asyncio.Future] = {}
+        self._read_task: Optional[asyncio.Task] = None
+        self._on_event: Optional[Callable[[dict], Any]] = None
+
+    # ── connection management ────────────────────────────────────────
+
+    async def connect(self) -> None:
+        """Connect to the aslan-browser Unix socket with retry."""
+        if self._reader is not None:
+            return
+
+        last_err: Optional[Exception] = None
+        for delay in _RETRY_DELAYS:
+            try:
+                if not os.path.exists(self._socket_path):
+                    raise ConnectionError(
+                        f"aslan-browser is not running. Socket not found at {self._socket_path}"
+                    )
+                self._reader, self._writer = await asyncio.open_unix_connection(
+                    self._socket_path
+                )
+                self._read_task = asyncio.create_task(self._read_loop())
+                return
+            except (ConnectionError, OSError) as exc:
+                last_err = exc
+                await asyncio.sleep(delay)
+
+        raise ConnectionError(
+            f"Failed to connect to aslan-browser after {len(_RETRY_DELAYS)} attempts: {last_err}"
+        )
+
+    async def close(self) -> None:
+        """Disconnect from the socket."""
+        if self._read_task:
+            self._read_task.cancel()
+            try:
+                await self._read_task
+            except asyncio.CancelledError:
+                pass
+            self._read_task = None
+
+        if self._writer:
+            try:
+                self._writer.close()
+                await self._writer.wait_closed()
+            except OSError:
+                pass
+            self._writer = None
+        self._reader = None
+
+        # Fail any pending requests
+        for fut in self._pending.values():
+            if not fut.done():
+                fut.set_exception(ConnectionError("Connection closed."))
+        self._pending.clear()
+
+    async def __aenter__(self) -> "AsyncAslanBrowser":
+        await self.connect()
+        return self
+
+    async def __aexit__(self, *_: Any) -> None:
+        await self.close()
+
+    def on_event(self, callback: Callable[[dict], Any]) -> None:
+        """Register a callback for JSON-RPC notifications (events)."""
+        self._on_event = callback
+
+    # ── read loop ────────────────────────────────────────────────────
+
+    async def _read_loop(self) -> None:
+        """Background task that reads responses and routes them."""
+        assert self._reader is not None
+        try:
+            while True:
+                line = await self._reader.readline()
+                if not line:
+                    break
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                if "id" in msg and msg["id"] in self._pending:
+                    self._pending[msg["id"]].set_result(msg)
+                elif "method" in msg:
+                    # Notification / event
+                    if self._on_event:
+                        try:
+                            result = self._on_event(msg)
+                            if asyncio.iscoroutine(result):
+                                await result
+                        except Exception:
+                            pass
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            pass
+        finally:
+            # Connection lost — fail pending
+            for fut in self._pending.values():
+                if not fut.done():
+                    fut.set_exception(ConnectionError("Connection lost."))
+            self._pending.clear()
+
+    # ── low-level RPC ────────────────────────────────────────────────
+
+    async def _call(self, method: str, params: Optional[dict] = None) -> Any:
+        """Send a JSON-RPC request and return the result."""
+        if self._writer is None:
+            raise ConnectionError("Not connected. Call connect() first.")
+
+        self._next_id += 1
+        req_id = self._next_id
+        request = {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": method,
+            "params": params or {},
+        }
+
+        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        self._pending[req_id] = future
+
+        self._writer.write((json.dumps(request) + "\n").encode("utf-8"))
+        await self._writer.drain()
+
+        try:
+            response = await future
+        finally:
+            self._pending.pop(req_id, None)
+
+        if "error" in response:
+            err = response["error"]
+            raise AslanBrowserError(err["code"], err["message"])
+        return response.get("result")
+
+    # ── navigation ───────────────────────────────────────────────────
+
+    async def navigate(
+        self,
+        url: str,
+        tab_id: str = "tab0",
+        wait_until: str = "load",
+        timeout: int = 30000,
+    ) -> dict:
+        """Navigate to a URL. Returns {"url": ..., "title": ...}."""
+        return await self._call(
+            "navigate",
+            {"tabId": tab_id, "url": url, "waitUntil": wait_until, "timeout": timeout},
+        )
+
+    async def go_back(self, tab_id: str = "tab0") -> dict:
+        """Navigate back."""
+        return await self._call("goBack", {"tabId": tab_id})
+
+    async def go_forward(self, tab_id: str = "tab0") -> dict:
+        """Navigate forward."""
+        return await self._call("goForward", {"tabId": tab_id})
+
+    async def reload(self, tab_id: str = "tab0") -> dict:
+        """Reload the page."""
+        return await self._call("reload", {"tabId": tab_id})
+
+    async def wait_for_selector(
+        self, selector: str, tab_id: str = "tab0", timeout: int = 5000
+    ) -> dict:
+        """Wait for a CSS selector to appear in the DOM."""
+        return await self._call(
+            "waitForSelector",
+            {"tabId": tab_id, "selector": selector, "timeout": timeout},
+        )
+
+    # ── evaluation ───────────────────────────────────────────────────
+
+    async def evaluate(
+        self, script: str, tab_id: str = "tab0", args: Optional[dict] = None
+    ) -> Any:
+        """Evaluate JavaScript and return the result value."""
+        params: dict[str, Any] = {"tabId": tab_id, "script": script}
+        if args:
+            params["args"] = args
+        result = await self._call("evaluate", params)
+        return result.get("value") if result else None
+
+    # ── page info ────────────────────────────────────────────────────
+
+    async def get_title(self, tab_id: str = "tab0") -> str:
+        """Get the page title."""
+        result = await self._call("getTitle", {"tabId": tab_id})
+        return result.get("title", "")
+
+    async def get_url(self, tab_id: str = "tab0") -> str:
+        """Get the current URL."""
+        result = await self._call("getURL", {"tabId": tab_id})
+        return result.get("url", "")
+
+    # ── accessibility tree ───────────────────────────────────────────
+
+    async def get_accessibility_tree(self, tab_id: str = "tab0") -> list[dict]:
+        """Extract the accessibility tree."""
+        result = await self._call("getAccessibilityTree", {"tabId": tab_id})
+        return result.get("tree", [])
+
+    # ── interaction ──────────────────────────────────────────────────
+
+    async def click(self, target: str, tab_id: str = "tab0") -> None:
+        """Click an element by @eN ref or CSS selector."""
+        await self._call("click", {"tabId": tab_id, "selector": target})
+
+    async def fill(self, target: str, value: str, tab_id: str = "tab0") -> None:
+        """Fill an input element."""
+        await self._call("fill", {"tabId": tab_id, "selector": target, "value": value})
+
+    async def select(self, target: str, value: str, tab_id: str = "tab0") -> None:
+        """Select an option in a <select> element."""
+        await self._call(
+            "select", {"tabId": tab_id, "selector": target, "value": value}
+        )
+
+    async def keypress(
+        self,
+        key: str,
+        tab_id: str = "tab0",
+        modifiers: Optional[dict[str, bool]] = None,
+    ) -> None:
+        """Send a keypress event."""
+        params: dict[str, Any] = {"tabId": tab_id, "key": key}
+        if modifiers:
+            params["modifiers"] = modifiers
+        await self._call("keypress", params)
+
+    async def scroll(
+        self,
+        x: float = 0,
+        y: float = 0,
+        target: Optional[str] = None,
+        tab_id: str = "tab0",
+    ) -> None:
+        """Scroll the page or a specific element."""
+        params: dict[str, Any] = {"tabId": tab_id, "x": x, "y": y}
+        if target:
+            params["selector"] = target
+        await self._call("scroll", params)
+
+    # ── screenshots ──────────────────────────────────────────────────
+
+    async def screenshot(
+        self, tab_id: str = "tab0", quality: int = 70, width: int = 1440
+    ) -> bytes:
+        """Take a screenshot. Returns JPEG bytes."""
+        result = await self._call(
+            "screenshot", {"tabId": tab_id, "quality": quality, "width": width}
+        )
+        return base64.b64decode(result["data"])
+
+    async def save_screenshot(
+        self,
+        path: str,
+        tab_id: str = "tab0",
+        quality: int = 70,
+        width: int = 1440,
+    ) -> int:
+        """Take a screenshot and save to a file. Returns file size in bytes."""
+        data = await self.screenshot(tab_id=tab_id, quality=quality, width=width)
+        with open(path, "wb") as f:
+            f.write(data)
+        return len(data)
+
+    # ── cookies ──────────────────────────────────────────────────────
+
+    async def get_cookies(
+        self, tab_id: str = "tab0", url: Optional[str] = None
+    ) -> list[dict]:
+        """Get cookies."""
+        params: dict[str, Any] = {"tabId": tab_id}
+        if url:
+            params["url"] = url
+        result = await self._call("getCookies", params)
+        return result.get("cookies", [])
+
+    async def set_cookie(
+        self,
+        name: str,
+        value: str,
+        domain: str,
+        path: str = "/",
+        expires: Optional[float] = None,
+        tab_id: str = "tab0",
+    ) -> None:
+        """Set a cookie."""
+        params: dict[str, Any] = {
+            "tabId": tab_id,
+            "name": name,
+            "value": value,
+            "domain": domain,
+            "path": path,
+        }
+        if expires is not None:
+            params["expires"] = expires
+        await self._call("setCookie", params)
+
+    # ── tab management ───────────────────────────────────────────────
+
+    async def tab_create(
+        self,
+        url: Optional[str] = None,
+        width: int = 1440,
+        height: int = 900,
+        hidden: Optional[bool] = None,
+    ) -> str:
+        """Create a new tab. Returns the tab ID."""
+        params: dict[str, Any] = {"width": width, "height": height}
+        if url:
+            params["url"] = url
+        if hidden is not None:
+            params["hidden"] = hidden
+        result = await self._call("tab.create", params)
+        return result["tabId"]
+
+    async def tab_close(self, tab_id: str) -> None:
+        """Close a tab."""
+        await self._call("tab.close", {"tabId": tab_id})
+
+    async def tab_list(self) -> list[dict]:
+        """List all open tabs."""
+        result = await self._call("tab.list")
+        return result.get("tabs", [])
