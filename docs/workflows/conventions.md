@@ -156,9 +156,21 @@ aslan-browser/                        # Project root
 ## 5. AppKit Patterns
 
 ### App Lifecycle
+Nib-less AppKit app requires a custom `static func main()` to wire the delegate manually.
+Without this, `NSApplicationMain()` never connects the delegate and `applicationDidFinishLaunching` is never called.
+`INFOPLIST_KEY_NSPrincipalClass = NSApplication` must be set in both Debug and Release build settings.
+
 ```swift
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
+
+    static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.run()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Start socket server, create default tab
     }
@@ -168,6 +180,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 ```
+
+### Entitlements
+The app uses App Sandbox (`ENABLE_APP_SANDBOX = YES`). Entitlements are in `aslan-browser/aslan_browser.entitlements`:
+- `com.apple.security.app-sandbox` — required
+- `com.apple.security.network.client` — required for WKWebView outgoing requests
+
+**Sandbox file access**: The sandbox remaps `/tmp/` to `~/Library/Containers/com.uzunu.aslan-browser/Data/tmp/`. The Unix socket path `/tmp/aslan-browser.sock` will need either a sandbox exception or the sandbox may need to be disabled for Phase 2. Use `NSTemporaryDirectory()` for any temp file writes.
 
 ### Window Creation (per tab)
 ```swift

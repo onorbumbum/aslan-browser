@@ -2,24 +2,28 @@
 
 Runtime discoveries, edge cases, and gotchas found during implementation. Updated by agents across all phases and sessions. Always loaded into context at session start.
 
-## Phase 1
+---
 
-### AppKit Lifecycle with `@main` (Critical)
-The `@main` attribute on `NSApplicationDelegate` generates a call to `NSApplicationMain()`, but without a main nib file, the delegate is never connected. **Fix:** Override `static func main()` to manually create `NSApplication.shared`, set the delegate, and call `app.run()`. This is required for any nib-less AppKit app.
+## Phase 1 — Skeleton
 
-### `NSPrincipalClass` Required
-The auto-generated Info.plist from a SwiftUI template doesn't include `NSPrincipalClass`. Added `INFOPLIST_KEY_NSPrincipalClass = NSApplication` to both Debug and Release build settings.
+**Status:** Complete ✅
 
-### App Sandbox Blocks `/tmp/` Writes
-With `ENABLE_APP_SANDBOX = YES`, the app can't write to `/tmp/` directly. Use `NSTemporaryDirectory()` instead, which resolves to the sandbox container: `~/Library/Containers/com.uzunu.aslan-browser/Data/tmp/`. For Phase 2's Unix socket at `/tmp/aslan-browser.sock`, the sandbox will need a file access exception, or we may need to disable sandbox.
+### Discoveries
 
-### Entitlements for Network Access
-Created `aslan-browser/aslan_browser.entitlements` with `com.apple.security.network.client = true` to allow WKWebView to make outgoing network requests.
+1. **Nib-less AppKit lifecycle requires custom `static func main()`** — `@main` on `NSApplicationDelegate` calls `NSApplicationMain()`, which only connects the delegate via a main nib. Without a nib, override `static func main()` to create `NSApplication.shared`, set the delegate, and call `app.run()`. Updated in conventions.md §5.
 
-### `WKNavigationDelegate.didFinish` Title Timing
-When `didFinish` fires, `webView.title` may be empty string (not yet parsed from `<title>`). The JS eval `document.title` returns the correct value. This is expected — title becomes available shortly after didFinish.
+2. **`NSPrincipalClass` must be set explicitly** — SwiftUI template's auto-generated Info.plist omits it. Added `INFOPLIST_KEY_NSPrincipalClass = NSApplication` to both Debug and Release build settings in the Xcode project.
 
-### Sync Conflict Files
-Syncthing (or similar) can create `.sync-conflict-*.swift` files in the source directory. These get auto-synced into the Xcode project via `PBXFileSystemSynchronizedRootGroup` and cause build failures due to duplicate type definitions. Delete them immediately.
+3. **App Sandbox remaps `/tmp/`** — `ENABLE_APP_SANDBOX = YES` redirects `/tmp/` to `~/Library/Containers/com.uzunu.aslan-browser/Data/tmp/`. Use `NSTemporaryDirectory()` for temp file writes. The Unix socket path `/tmp/aslan-browser.sock` will conflict with sandbox in Phase 2.
 
-Phase 1 complete. App launches with AppKit lifecycle, BrowserTab loads pages, navigate/evaluate/screenshot working.
+4. **`com.apple.security.network.client` entitlement required** — Without it, WKWebView silently fails to load any URL under sandbox.
+
+5. **`webView.title` may be empty at `didFinish` time** — Title is parsed after the navigation delegate callback. Use `document.title` via JS eval for reliable title retrieval immediately after navigation.
+
+6. **Sync conflict files break builds** — Syncthing `.sync-conflict-*.swift` files get auto-included by `PBXFileSystemSynchronizedRootGroup`, causing duplicate type errors. Delete on sight. Consider adding a `.gitignore` or `.stignore` pattern.
+
+### Phase 2 Considerations
+
+- **Sandbox vs Unix socket**: Must decide whether to disable sandbox, use a socket path inside the container, or add a sandbox exception. This is the first decision for Phase 2.
+- **Smoke test removal**: The `runSmokeTest()` method in AppDelegate should be replaced by socket server startup in Phase 2.
+- **`BrowserError` enum**: Already defined in `BrowserTab.swift` with cases `navigationFailed`, `invalidURL`, `javaScriptError`, `screenshotFailed`. Phase 2 will map these to JSON-RPC error codes.
