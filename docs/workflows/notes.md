@@ -156,3 +156,59 @@ JSON-RPC methods added: `waitForSelector`. Navigate updated with `waitUntil` par
 ### Files Modified
 - `aslan-browser/BrowserTab.swift` — User script injection, message handler, readiness tracking, waitForIdle, waitForSelector, navigate waitUntil
 - `aslan-browser/MethodRouter.swift` — waitForSelector method, navigate waitUntil/timeout params
+
+---
+
+## Phase 5 — Tab Management + Events
+
+**Status:** Complete ✅
+
+### Decisions
+
+1. **TabManager is @MainActor** — Manages the tabId → BrowserTab map. Tab IDs are auto-generated: "tab0", "tab1", etc. Default tab0 created on app launch synchronously (before socket server starts).
+
+2. **tabId defaults to "tab0"** — All existing JSON-RPC methods accept optional `tabId` param. If not provided, defaults to "tab0" for backward compatibility.
+
+3. **Event chain: BrowserTab → TabManager → SocketServer** — BrowserTab has `onEvent` closure, TabManager forwards via `broadcastEvent` closure, AppDelegate connects to `SocketServer.broadcast`. No direct coupling between layers.
+
+4. **SocketServer tracks channels with NSLock** — Client channels stored in `[ObjectIdentifier: Channel]` dict protected by NSLock. Safe for cross-thread access (MainActor → NIO event loop).
+
+5. **App Sandbox disabled** — Set `ENABLE_APP_SANDBOX = NO` and removed sandbox entitlements. The temporary-exception for `/tmp/aslan-browser.sock` was not being properly embedded in codesigned binary. Sandbox disabled is acceptable for local dev/agent tool.
+
+### Discoveries
+
+1. **NSWindow close animation causes use-after-free** — Closing a tab's NSWindow triggers `_NSWindowTransformAnimation` objects that reference the window. When ARC releases the BrowserTab (removed from TabManager dict), the animation objects become dangling pointers. Crash in `objc_release` during autorelease pool drain.
+
+2. **Fix: deferred cleanup for tab close** — `closeTab` sets `animationBehavior = .none`, calls `orderOut(nil)`, and keeps the BrowserTab in a `closingTabs` array for 500ms. BrowserTab's `cleanup()` method disconnects all delegates, message handlers, and stops loading before the window is hidden.
+
+3. **Cookie domain matching** — `HTTPCookie.domain` with leading dot (e.g., `.example.com`) needs special handling. Strip the dot and match: host == strippedDomain OR host.hasSuffix("." + strippedDomain).
+
+4. **Console capture via JS override** — Override `console.log/warn/error/info` in ScriptBridge to post messages to Swift. Original methods still called after posting. Also capture `window.onerror` and `unhandledrejection` events.
+
+5. **Event notifications skip by id** — JSON-RPC notifications (no `id` field) can interleave with responses. Client test code must skip lines without `id` when waiting for a specific response.
+
+### Architecture
+
+Full API surface complete:
+- **Tab management**: tab.create, tab.close, tab.list
+- **Navigation**: navigate (with waitUntil), goBack, goForward, reload, waitForSelector
+- **Interaction**: click, fill, select, keypress, scroll
+- **Extraction**: getAccessibilityTree, getHTML (via evaluate), getTitle, getURL, screenshot
+- **State**: getCookies, setCookie
+- **Events**: event.console, event.navigation, event.error notifications
+
+### Files Added
+- `aslan-browser/TabManager.swift` — Tab lifecycle management
+- `aslan-browser/Models/TabInfo.swift` — Tab metadata struct
+
+### Files Modified
+- `aslan-browser/AppDelegate.swift` — Uses TabManager, connects event broadcasting
+- `aslan-browser/BrowserTab.swift` — Added tabId, onEvent, cleanup(), getCookies, setCookie, goBack, goForward, reload, configurable width/height
+- `aslan-browser/MethodRouter.swift` — All methods resolve tabId from params. Added tab.create/close/list, getCookies, setCookie, goBack, goForward, reload
+- `aslan-browser/ScriptBridge.swift` — Console capture, JS error capture
+- `aslan-browser/SocketServer.swift` — Client channel tracking, broadcast method
+- `aslan-browser/JSONRPCHandler.swift` — Channel registration/unregistration with SocketServer
+- `aslan-browser/aslan_browser.entitlements` — Removed sandbox, kept network entitlements
+- `tests/test_socket.py` — 19 tests covering full API surface
+
+Phase 5 complete. Full API surface operational. Ready for Python SDK.

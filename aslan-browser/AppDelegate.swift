@@ -24,7 +24,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         CommandLine.arguments.contains("--hidden")
     }
 
-    private var tab: BrowserTab?
+    private var tabManager: TabManager?
     private var socketServer: SocketServer?
 
     private let socketPath = "/tmp/aslan-browser.sock"
@@ -32,12 +32,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSLog("[aslan-browser] launched (hidden: \(isHidden))")
 
-        let browserTab = BrowserTab(isHidden: isHidden)
-        self.tab = browserTab
+        let tabManager = TabManager(isHidden: isHidden)
+        tabManager.createTab() // default tab0
+        self.tabManager = tabManager
 
-        let router = MethodRouter(tab: browserTab)
+        let router = MethodRouter(tabManager: tabManager)
         let server = SocketServer(socketPath: socketPath, router: router)
         self.socketServer = server
+
+        tabManager.broadcastEvent = { [weak server] method, params in
+            server?.broadcast(method: method, params: params)
+        }
 
         do {
             try server.start()

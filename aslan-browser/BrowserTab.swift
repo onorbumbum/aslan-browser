@@ -14,11 +14,15 @@ struct NavigationResult {
 @MainActor
 class BrowserTab: NSObject, WKNavigationDelegate {
 
+    let tabId: String
     let webView: WKWebView
     let window: NSWindow
 
     private var navigationContinuation: CheckedContinuation<NavigationResult, Error>?
     private var messageHandler: ScriptMessageHandler?
+
+    // Event callback: (method, params) — set by TabManager
+    var onEvent: ((_ method: String, _ params: [String: Any]) -> Void)?
 
     // Readiness tracking
     private var didFinishNavigation = false
@@ -28,12 +32,14 @@ class BrowserTab: NSObject, WKNavigationDelegate {
     private var idleContinuations: [Int: CheckedContinuation<Void, Error>] = [:]
     private var nextIdleContinuationId = 0
 
-    init(isHidden: Bool = false) {
+    init(tabId: String, width: Int = 1440, height: Int = 900, isHidden: Bool = false) {
+        self.tabId = tabId
+
         let config = WKWebViewConfiguration()
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         config.userContentController.addUserScript(ScriptBridge.makeUserScript())
 
-        let frame = NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let frame = NSRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height))
 
         let wv = WKWebView(frame: frame, configuration: config)
         self.webView = wv
@@ -84,6 +90,15 @@ class BrowserTab: NSObject, WKNavigationDelegate {
             checkIdleAndResume()
         case "networkBusy":
             networkIdle = false
+        case "console":
+            let level = dict["level"] as? String ?? "log"
+            let message = dict["message"] as? String ?? ""
+            onEvent?("event.console", ["tabId": tabId, "level": level, "message": message])
+        case "error":
+            let message = dict["message"] as? String ?? ""
+            let source = dict["source"] as? String ?? ""
+            let line = dict["line"] as? Int ?? 0
+            onEvent?("event.error", ["tabId": tabId, "message": message, "source": source, "line": line])
         default:
             NSLog("[aslan-browser] Unknown script message type: \(type)")
         }
@@ -149,6 +164,22 @@ class BrowserTab: NSObject, WKNavigationDelegate {
         }
     }
 
+    // MARK: - Cleanup
+
+    func cleanup() {
+        onEvent = nil
+        navigationContinuation = nil
+        let continuations = idleContinuations
+        idleContinuations.removeAll()
+        for (_, c) in continuations {
+            c.resume(throwing: BrowserError.tabNotFound(tabId))
+        }
+        webView.stopLoading()
+        webView.navigationDelegate = nil
+        webView.configuration.userContentController.removeAllScriptMessageHandlers()
+        webView.removeFromSuperview()
+    }
+
     // MARK: - Navigate
 
     enum WaitUntil: String {
@@ -184,6 +215,39 @@ class BrowserTab: NSObject, WKNavigationDelegate {
             // Re-fetch title after idle since it may have changed
             let title = try await evaluate("return document.title") as? String ?? result.title
             return NavigationResult(url: result.url, title: title)
+        }
+    }
+
+    // MARK: - Navigation History
+
+    func goBack() async throws -> NavigationResult {
+        guard webView.canGoBack else {
+            let url = webView.url?.absoluteString ?? ""
+            let title = webView.title ?? ""
+            return NavigationResult(url: url, title: title)
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            self.navigationContinuation = continuation
+            self.webView.goBack()
+        }
+    }
+
+    func goForward() async throws -> NavigationResult {
+        guard webView.canGoForward else {
+            let url = webView.url?.absoluteString ?? ""
+            let title = webView.title ?? ""
+            return NavigationResult(url: url, title: title)
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            self.navigationContinuation = continuation
+            self.webView.goForward()
+        }
+    }
+
+    func reload() async throws -> NavigationResult {
+        return try await withCheckedThrowingContinuation { continuation in
+            self.navigationContinuation = continuation
+            self.webView.reload()
         }
     }
 
@@ -354,6 +418,56 @@ class BrowserTab: NSObject, WKNavigationDelegate {
         }
     }
 
+    // MARK: - Cookies
+
+    func getCookies(url: String? = nil) async -> [[String: Any]] {
+        let store = webView.configuration.websiteDataStore.httpCookieStore
+        let allCookies = await store.allCookies()
+
+        let filtered: [HTTPCookie]
+        if let urlStr = url, let parsedURL = URL(string: urlStr) {
+            filtered = allCookies.filter { cookie in
+                let host = parsedURL.host ?? ""
+                let cookieDomain = cookie.domain.hasPrefix(".") ? String(cookie.domain.dropFirst()) : cookie.domain
+                return host == cookieDomain || host.hasSuffix(".\(cookieDomain)")
+            }
+        } else {
+            filtered = allCookies
+        }
+
+        return filtered.map { cookie in
+            var dict: [String: Any] = [
+                "name": cookie.name,
+                "value": cookie.value,
+                "domain": cookie.domain,
+                "path": cookie.path
+            ]
+            if let expires = cookie.expiresDate {
+                dict["expires"] = expires.timeIntervalSince1970
+            }
+            return dict
+        }
+    }
+
+    func setCookie(name: String, value: String, domain: String, path: String = "/", expires: Double? = nil) async throws {
+        var properties: [HTTPCookiePropertyKey: Any] = [
+            .name: name,
+            .value: value,
+            .domain: domain,
+            .path: path
+        ]
+        if let expires {
+            properties[.expires] = Date(timeIntervalSince1970: expires)
+        }
+
+        guard let cookie = HTTPCookie(properties: properties) else {
+            throw BrowserError.javaScriptError("Invalid cookie properties")
+        }
+
+        let store = webView.configuration.websiteDataStore.httpCookieStore
+        await store.setCookie(cookie)
+    }
+
     // MARK: - Evaluate
 
     func evaluate(_ script: String, args: [String: Any]? = nil) async throws -> Any? {
@@ -410,6 +524,8 @@ class BrowserTab: NSObject, WKNavigationDelegate {
             let result = NavigationResult(url: url, title: title)
             self.navigationContinuation?.resume(returning: result)
             self.navigationContinuation = nil
+
+            self.onEvent?("event.navigation", ["tabId": self.tabId, "url": url])
         }
     }
 

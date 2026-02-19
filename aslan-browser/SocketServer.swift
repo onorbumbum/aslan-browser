@@ -41,10 +41,50 @@ class SocketServer {
     private let socketPath: String
     private let router: MethodRouter
 
+    // Connected client tracking
+    private let clientLock = NSLock()
+    private var clientChannels: [ObjectIdentifier: Channel] = [:]
+
     init(socketPath: String, router: MethodRouter) {
         self.socketPath = socketPath
         self.router = router
         self.group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    }
+
+    func addClient(_ channel: Channel) {
+        clientLock.lock()
+        clientChannels[ObjectIdentifier(channel)] = channel
+        clientLock.unlock()
+        NSLog("[aslan-browser] Client connected (total: \(clientChannels.count))")
+    }
+
+    func removeClient(_ channel: Channel) {
+        clientLock.lock()
+        clientChannels.removeValue(forKey: ObjectIdentifier(channel))
+        clientLock.unlock()
+        NSLog("[aslan-browser] Client disconnected (total: \(clientChannels.count))")
+    }
+
+    func broadcast(method: String, params: [String: Any]) {
+        let notification: [String: Any] = [
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: notification) else { return }
+
+        clientLock.lock()
+        let channels = Array(clientChannels.values)
+        clientLock.unlock()
+
+        for ch in channels {
+            var buffer = ch.allocator.buffer(capacity: data.count + 1)
+            buffer.writeBytes(data)
+            buffer.writeString("\n")
+            ch.writeAndFlush(buffer).whenFailure { [weak self] _ in
+                self?.removeClient(ch)
+            }
+        }
     }
 
     func start() throws {
@@ -52,10 +92,11 @@ class SocketServer {
 
         let bootstrap = ServerBootstrap(group: group)
             .serverChannelOption(.backlog, value: 256)
-            .childChannelInitializer { [router] channel in
-                channel.pipeline.addHandlers([
+            .childChannelInitializer { [router, weak self] channel in
+                guard let self else { return channel.eventLoop.makeSucceededVoidFuture() }
+                return channel.pipeline.addHandlers([
                     ByteToMessageHandler(LineBasedFrameDecoder()),
-                    JSONRPCHandler(router: router)
+                    JSONRPCHandler(router: router, server: self)
                 ])
             }
             .childChannelOption(.socketOption(.so_reuseaddr), value: 1)

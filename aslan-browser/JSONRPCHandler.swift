@@ -11,9 +11,21 @@ final class JSONRPCHandler: ChannelInboundHandler {
     typealias OutboundOut = ByteBuffer
 
     private let router: MethodRouter
+    private let server: SocketServer
 
-    init(router: MethodRouter) {
+    init(router: MethodRouter, server: SocketServer) {
         self.router = router
+        self.server = server
+    }
+
+    func channelActive(context: ChannelHandlerContext) {
+        server.addClient(context.channel)
+        context.fireChannelActive()
+    }
+
+    func channelInactive(context: ChannelHandlerContext) {
+        server.removeClient(context.channel)
+        context.fireChannelInactive()
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {

@@ -361,6 +361,40 @@ enum ScriptBridge {
                 };
             })();
 
+            // --- Console capture ---
+
+            (function() {
+                ["log", "warn", "error", "info"].forEach(function(level) {
+                    var original = console[level];
+                    console[level] = function() {
+                        var args = Array.prototype.slice.call(arguments);
+                        var message = args.map(function(a) {
+                            return typeof a === "object" ? JSON.stringify(a) : String(a);
+                        }).join(" ");
+                        window.__agent.post("console", { level: level, message: message });
+                        original.apply(console, args);
+                    };
+                });
+            })();
+
+            // --- JS error capture ---
+
+            window.onerror = function(message, source, lineno) {
+                window.__agent.post("error", {
+                    message: String(message),
+                    source: source || "",
+                    line: lineno || 0
+                });
+            };
+
+            window.addEventListener("unhandledrejection", function(event) {
+                window.__agent.post("error", {
+                    message: String(event.reason),
+                    source: "",
+                    line: 0
+                });
+            });
+
             // --- waitForSelector ---
 
             window.__agent.waitForSelector = function(selector, timeoutMs) {
