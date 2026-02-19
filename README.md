@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-macOS%2015%2B-blue" alt="macOS 15+">
+  <img src="https://img.shields.io/badge/platform-macOS%2014%2B-blue" alt="macOS 14+">
   <img src="https://img.shields.io/badge/swift-6.2-orange" alt="Swift 6.2">
   <img src="https://img.shields.io/badge/python-3.10%2B-green" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT License">
@@ -85,7 +85,7 @@ Navigate, read the tree, act on refs. The accessibility tree is the key idea her
 
 | Requirement | Version | Check |
 |---|---|---|
-| macOS | 15.0+ (Sequoia) | `sw_vers` |
+| macOS | 14.0+ (Sonoma) | `sw_vers` |
 | Xcode | 16+ (Swift 6.2) | `xcodebuild -version` |
 | Python | 3.10+ | `python3 --version` |
 
@@ -164,7 +164,7 @@ git clone https://github.com/onorbumbum/aslan-browser.git
 pip install -e aslan-browser/sdk/python
 ```
 
-Requires macOS 15.0+ (Sequoia). The universal build runs natively on both Apple Silicon and Intel Macs.
+Requires macOS 14.0+ (Sonoma). The universal build runs natively on both Apple Silicon and Intel Macs.
 
 ---
 

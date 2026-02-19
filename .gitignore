@@ -26,3 +26,4 @@ dist/
 *.egg
 .pi/
 .build-x86/
+*.zip

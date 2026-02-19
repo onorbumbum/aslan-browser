@@ -11,7 +11,7 @@ Project conventions, architecture decisions, and coding standards. Loaded at the
 - **What it is**: A native macOS app wrapping WKWebView, exposing a JSON-RPC API over a Unix socket so AI agents can browse the web programmatically.
 - **What it is NOT**: A general-purpose browser, a cross-platform tool, a CDP replacement.
 - **Socket path**: `/tmp/aslan-browser.sock`
-- **Deployment target**: macOS 15.0
+- **Deployment target**: macOS 14.0
 - **Swift**: 6.2 (language version 5.0)
 
 ---
