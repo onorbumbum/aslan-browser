@@ -246,3 +246,114 @@ Phase 5 complete. Full API surface operational. Ready for Python SDK.
 2. **Each sync test gets a fresh socket connection** — Tests that share tab0 can interfere if a prior test's navigation is still in-flight when the new connection navigates. Fresh connections per test fixture avoid this.
 
 Phase 6 complete. All 6 phases done. aslan-browser is fully operational.
+
+---
+
+## Real-World Testing & Agent Integration (2026-02-19)
+
+**Status:** Validated ✅
+
+### User-Agent Fix (Critical)
+
+1. **WKWebView's default UA gets flagged by Google/Gmail** — Default UA string looks like `AppleWebKit/605.1.15 ... Safari/605.1.15`, which Google classifies as an unsupported embedded browser. Gmail shows a "This browser version is no longer supported" banner.
+
+2. **Fix: Set `customUserAgent` to Chrome UA** — Added `wv.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"` in `BrowserTab.init`. One line. Eliminates the banner entirely.
+
+3. **This should be the default for any agent browser** — Sites like Google, LinkedIn, and Facebook actively check UA strings. A modern Chrome UA is required for full compatibility.
+
+### Real-World Site Validation
+
+Successfully tested full interactive flows on:
+- **Gmail** — Login (email + password + 2FA), inbox navigation, reading accessibility tree (524 nodes)
+- **LinkedIn** — Login, feed browsing, notification checking, full page interaction
+- **Facebook** — Login, switching to business page (Uzunu), creating post draft with text + image upload
+- **Hacker News** — Story listing, comment reading, article navigation
+- **Amazon** — Product page rendering, complex DOM extraction
+
+All sites worked with the Chrome UA. Sessions persist across browser restarts (cookies retained).
+
+### Tree-First Agent Pattern (Key Learning)
+
+The most important operational insight: **the accessibility tree should be the primary interface for AI agents, not screenshots.**
+
+| Metric | A11y Tree | Screenshot |
+|---|---|---|
+| Latency | ~5ms | ~13ms |
+| Payload | ~22-33KB JSON | ~150-250KB JPEG |
+| LLM tokens | Low (structured text) | Very high (vision) |
+| Actionable | Yes (@eN refs) | No (pixels only) |
+
+**LinkedIn benchmark: 30x fewer tokens with a11y tree vs raw DOM.**
+
+**Rule: Use tree for everything. Screenshot only for:**
+- Visual verification (did the image upload? does it look right?)
+- Showing results to the user
+- When tree is ambiguous or page relies on visual layout
+
+A Facebook post draft flow (navigate → find button → click → type text → attach image → verify) took **4 tree-based commands and only 1 screenshot** at the end.
+
+### Contenteditable / Rich Text Fields
+
+Facebook's post composer uses `contenteditable` divs, not `<input>` or `<textarea>`. The SDK's `fill()` method (which sets `.value`) doesn't work on these.
+
+**Workaround:** Use `document.execCommand("insertText", false, text)` via `evaluate()`:
+```python
+browser.evaluate('''
+    var editors = document.querySelectorAll("[contenteditable=true]");
+    for (var e of editors) {
+        if (e.closest("[role=dialog]")) {
+            e.focus();
+            document.execCommand("insertText", false, text);
+            return "done";
+        }
+    }
+''', args={'text': post_text})
+```
+
+**TODO:** Consider adding a `fill_rich()` or `type_text()` method to the SDK that handles contenteditable automatically.
+
+### File Upload Without Native Picker
+
+WKWebView file input clicks open a native macOS file picker that can't be automated via JS. However, files can be set programmatically using the `DataTransfer` API:
+
+```python
+# Read file, base64 encode, inject via DataTransfer
+browser.evaluate('''
+    var input = document.querySelector("input[type=file]");
+    var binary = atob(b64data);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    var file = new File([bytes], filename, { type: mimetype });
+    var dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+''', args={'b64data': img_b64, 'filename': 'photo.png', 'mimetype': 'image/png'})
+```
+
+This successfully uploaded images to Facebook. Works for any site that uses standard file inputs.
+
+**TODO:** Consider adding an `upload()` method to the SDK that wraps this pattern.
+
+### System-Wide Installation
+
+Installed from source:
+- **App:** `/Applications/aslan-browser.app` (Release build)
+- **CLI:** `~/.local/bin/aslan-browser` (shell wrapper)
+- **Python SDK:** `pip install -e sdk/python/`
+
+### Helper Tool: `ab.py`
+
+Created `ab.py` — a quick CLI for interactive agent control:
+```bash
+python3 ab.py nav "https://example.com"   # navigate
+python3 ab.py tree                          # print a11y tree
+python3 ab.py click "@e5"                   # click by ref
+python3 ab.py fill "@e3" "hello"            # fill input
+python3 ab.py shot /tmp/page.jpg            # screenshot
+python3 ab.py eval "return document.title"  # JS eval
+python3 ab.py back                          # go back
+python3 ab.py key Escape                    # keypress
+```
+
+Useful for interactive agent sessions where an LLM drives the browser step-by-step.
