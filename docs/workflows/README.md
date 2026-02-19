@@ -23,6 +23,7 @@ Each phase is a self-contained workflow document with a corresponding state file
 | 4 | `phase-4-accessibility-tree.md` | `state/phase-4-plan.json` | DOM walker, a11y tree extraction, ref-based interaction |
 | 5 | `phase-5-tab-management.md` | `state/phase-5-plan.json` | Multi-tab, events, cookies, navigation history |
 | 6 | `phase-6-python-sdk.md` | `state/phase-6-plan.json` | Python client library, benchmarks, documentation |
+| 7 | `phase-7-usability-and-multi-agent.md` | `state/phase-7-plan.json` | Edit menu (Cmd+V), window controls, address bar, sessions, batch ops |
 
 ## Rules for Agents
 

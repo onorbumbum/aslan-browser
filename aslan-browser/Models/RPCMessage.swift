@@ -113,6 +113,10 @@ struct RPCError: Error {
     static func timeout(_ detail: String? = nil) -> RPCError {
         RPCError(code: -32003, message: "Timeout", data: detail)
     }
+
+    static func sessionNotFound(_ sessionId: String) -> RPCError {
+        RPCError(code: -32004, message: "Session not found: \(sessionId)", data: nil)
+    }
 }
 
 // MARK: - Parse Errors

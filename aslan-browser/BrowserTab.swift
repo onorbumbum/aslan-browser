@@ -12,17 +12,22 @@ struct NavigationResult {
 }
 
 @MainActor
-class BrowserTab: NSObject, WKNavigationDelegate {
+class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
 
     let tabId: String
     let webView: WKWebView
     let window: NSWindow
+    var sessionId: String?
+    private var urlField: NSTextField?
 
     private var navigationContinuation: CheckedContinuation<NavigationResult, Error>?
     private var messageHandler: ScriptMessageHandler?
 
     // Event callback: (method, params) — set by TabManager
     var onEvent: ((_ method: String, _ params: [String: Any]) -> Void)?
+
+    // Window close callback — set by TabManager to handle close button
+    var onWindowClose: ((_ tabId: String) -> Void)?
 
     // Readiness tracking
     private var didFinishNavigation = false
@@ -47,11 +52,40 @@ class BrowserTab: NSObject, WKNavigationDelegate {
 
         let win = NSWindow(
             contentRect: frame,
-            styleMask: [.titled, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
-        win.contentView = wv
+        win.title = tabId
+
+        // Container with URL bar + webView
+        let container = NSView(frame: frame)
+        // container keeps translatesAutoresizingMaskIntoConstraints = true (default)
+        // because NSWindow manages contentView sizing
+        win.contentView = container
+
+        let urlBar = NSTextField()
+        urlBar.placeholderString = "Enter URL..."
+        urlBar.font = NSFont.systemFont(ofSize: 13)
+        urlBar.bezelStyle = .roundedBezel
+        urlBar.translatesAutoresizingMaskIntoConstraints = false
+
+        wv.translatesAutoresizingMaskIntoConstraints = false
+
+        container.addSubview(urlBar)
+        container.addSubview(wv)
+
+        NSLayoutConstraint.activate([
+            urlBar.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
+            urlBar.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
+            urlBar.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -4),
+            urlBar.heightAnchor.constraint(equalToConstant: 28),
+
+            wv.topAnchor.constraint(equalTo: urlBar.bottomAnchor, constant: 4),
+            wv.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            wv.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            wv.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
 
         if isHidden {
             win.orderOut(nil)
@@ -62,6 +96,13 @@ class BrowserTab: NSObject, WKNavigationDelegate {
         self.window = win
 
         super.init()
+
+        // Wire up URL bar target/action after super.init()
+        urlBar.target = self
+        urlBar.action = #selector(urlFieldAction(_:))
+        self.urlField = urlBar
+
+        win.delegate = self
         self.webView.navigationDelegate = self
 
         let handler = ScriptMessageHandler { [weak self] body in
@@ -165,10 +206,53 @@ class BrowserTab: NSObject, WKNavigationDelegate {
         }
     }
 
+    // MARK: - Window Title & URL Bar
+
+    func updateWindowTitle() {
+        let url = webView.url?.absoluteString ?? ""
+        let title = webView.title ?? ""
+        let display = title.isEmpty ? url : title
+        window.title = display.isEmpty ? tabId : "\(tabId) — \(display)"
+        updateURLField()
+    }
+
+    private func updateURLField() {
+        urlField?.stringValue = webView.url?.absoluteString ?? ""
+    }
+
+    @objc private func urlFieldAction(_ sender: NSTextField) {
+        var urlString = sender.stringValue.trimmingCharacters(in: .whitespaces)
+        if urlString.isEmpty { return }
+
+        // Add https:// if no scheme provided
+        if !urlString.contains("://") {
+            urlString = "https://" + urlString
+        }
+
+        Task { @MainActor in
+            do {
+                let result = try await self.navigate(to: urlString)
+                sender.stringValue = result.url
+            } catch {
+                NSLog("[aslan-browser] URL bar navigation failed: \(error)")
+            }
+        }
+    }
+
+    // MARK: - NSWindowDelegate
+
+    nonisolated func windowShouldClose(_ sender: NSWindow) -> Bool {
+        Task { @MainActor in
+            self.onWindowClose?(self.tabId)
+        }
+        return false  // TabManager handles actual close via closeTab()
+    }
+
     // MARK: - Cleanup
 
     func cleanup() {
         onEvent = nil
+        onWindowClose = nil
         navigationContinuation = nil
         let continuations = idleContinuations
         idleContinuations.removeAll()
@@ -525,6 +609,8 @@ class BrowserTab: NSObject, WKNavigationDelegate {
             let result = NavigationResult(url: url, title: title)
             self.navigationContinuation?.resume(returning: result)
             self.navigationContinuation = nil
+
+            self.updateWindowTitle()
 
             self.onEvent?("event.navigation", ["tabId": self.tabId, "url": url])
         }

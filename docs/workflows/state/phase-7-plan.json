@@ -1,0 +1,105 @@
+{
+  "metadata": {
+    "phase": "7",
+    "name": "Usability & Multi-Agent",
+    "description": "Fix keyboard shortcuts, add window controls, address bar, session-based tab ownership, batch operations",
+    "projectRoot": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser",
+    "sourceDir": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser",
+    "sdkDir": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/sdk/python",
+    "xcodeprojPath": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser.xcodeproj",
+    "scheme": "aslan-browser",
+    "socketPath": "/tmp/aslan-browser.sock",
+    "previousPhase": "6"
+  },
+  "workItems": [
+    {
+      "id": "edit-menu",
+      "status": "done",
+      "title": "Add macOS Edit menu for keyboard shortcuts",
+      "description": "Create a programmatic main menu in AppDelegate with App menu (Quit) and Edit menu (Undo, Redo, Cut, Copy, Paste, Select All). This wires Cmd+C/V/X/A/Z to AppKit's responder chain so WKWebView handles them. Call setupMainMenu() as the first thing in applicationDidFinishLaunching, before creating TabManager or anything else.",
+      "filesToModify": [
+        "aslan-browser/AppDelegate.swift"
+      ],
+      "dependsOn": [],
+      "verifyBuild": true
+    },
+    {
+      "id": "window-controls",
+      "status": "done",
+      "title": "Enable close/minimize buttons and window titles",
+      "description": "Change NSWindow styleMask to include .closable and .miniaturizable. Set window title to tabId + page title. Make BrowserTab conform to NSWindowDelegate and handle windowShouldClose by notifying TabManager via an onWindowClose callback. TabManager wires the callback during createTab to call closeTab. Add updateWindowTitle() to BrowserTab called after navigation completes. Return false from windowShouldClose and let TabManager handle the full cleanup flow (avoids use-after-free from Phase 5 discovery).",
+      "filesToModify": [
+        "aslan-browser/BrowserTab.swift",
+        "aslan-browser/TabManager.swift"
+      ],
+      "dependsOn": [],
+      "verifyBuild": true
+    },
+    {
+      "id": "address-bar",
+      "status": "done",
+      "title": "Add URL address bar to browser windows",
+      "description": "Add an NSTextField above the WKWebView in each tab window. The text field shows the current URL, updates on navigation, and navigates when the user presses Enter. Use Auto Layout: urlField pinned to top with 4px margin, webView fills remaining space below. The urlField target/action fires urlFieldAction which prepends https:// if no scheme, then calls navigate(). Update URL field in webView(_:didFinish:) and after waitForIdle.",
+      "filesToModify": [
+        "aslan-browser/BrowserTab.swift"
+      ],
+      "dependsOn": [
+        "window-controls"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "tab-sessions",
+      "status": "done",
+      "title": "Add session-based tab ownership",
+      "description": "Add sessionId property to BrowserTab. Add Session struct and session tracking to TabManager (sessions dict, nextSessionId counter). Add createSession(name:) returning sessionId ('s0', 's1', etc.). Add destroySession(id:) that closes all tabs tagged with that session and removes the session. Modify createTab to accept optional sessionId param. Modify listTabs to accept optional sessionId filter. Add sessionNotFound case to BrowserError with RPC code -32004. Add session.create and session.destroy handlers to MethodRouter.",
+      "filesToModify": [
+        "aslan-browser/BrowserTab.swift",
+        "aslan-browser/TabManager.swift",
+        "aslan-browser/MethodRouter.swift",
+        "aslan-browser/Models/BrowserError.swift"
+      ],
+      "dependsOn": [],
+      "verifyBuild": true
+    },
+    {
+      "id": "batch-operations",
+      "status": "done",
+      "title": "Add batch JSON-RPC method for parallel operations",
+      "description": "Add 'batch' method to MethodRouter that accepts {requests: [{method, params}, ...]} and returns {responses: [{result} | {error}, ...]}. Use Swift TaskGroup to execute sub-requests concurrently. Preserve response order matching request order. Handle errors per sub-request (don't fail the whole batch). Reject nested batch calls. Reject requests where method is 'batch' to prevent recursion.",
+      "filesToModify": [
+        "aslan-browser/MethodRouter.swift"
+      ],
+      "dependsOn": [],
+      "verifyBuild": true
+    },
+    {
+      "id": "sdk-updates",
+      "status": "done",
+      "title": "Update Python SDK with session, batch, and parallel helpers",
+      "description": "Add to both sync and async clients: session_create(name), session_destroy(session_id), batch(requests), parallel_get_trees(tab_ids), parallel_navigate(urls_dict, wait_until), parallel_screenshots(tab_ids, quality, width). Update tab_create to accept optional session_id param. Update tab_list to accept optional session_id param.",
+      "filesToModify": [
+        "sdk/python/aslan_browser/client.py",
+        "sdk/python/aslan_browser/async_client.py"
+      ],
+      "dependsOn": [
+        "tab-sessions",
+        "batch-operations"
+      ],
+      "verifyBuild": false
+    },
+    {
+      "id": "integration-tests",
+      "status": "done",
+      "title": "Integration tests for Phase 7 features",
+      "description": "Create tests/test_phase7.py with pytest tests: test_session_lifecycle (create session, create tabs in it, list with filter, destroy, verify cleanup), test_batch_get_trees (create tabs, navigate, batch read trees), test_batch_partial_error (mix valid and invalid tabs in batch), test_parallel_navigate (navigate multiple tabs at once), test_window_title_update (navigate and check title via getTitle). Use AslanBrowser fixture with fresh connection per test. Document manual tests (Cmd+V paste, close button, address bar) in file docstring.",
+      "filesToCreate": [
+        "tests/test_phase7.py"
+      ],
+      "dependsOn": [
+        "sdk-updates"
+      ],
+      "verifyRun": true
+    }
+  ]
+}

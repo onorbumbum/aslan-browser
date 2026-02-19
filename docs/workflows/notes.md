@@ -357,3 +357,37 @@ python3 ab.py key Escape                    # keypress
 ```
 
 Useful for interactive agent sessions where an LLM drives the browser step-by-step.
+
+---
+
+## Phase 7 — Usability & Multi-Agent
+
+**Status:** Complete ✅
+
+### Changes
+- Edit menu added (Cmd+C/V/X/A/Z now work in WKWebView fields)
+- Window controls: close, minimize, window titles showing tab + page info
+- Address bar for manual URL entry with auto https:// prepend
+- Session-based tab ownership for multi-agent isolation
+- Batch JSON-RPC method for parallel operations
+- Python SDK: session_create, session_destroy, batch, parallel_get_trees, parallel_navigate, parallel_screenshots
+
+### Decisions
+
+1. **Edit menu uses `Selector(("undo:"))` for undo/redo** — These Objective-C selectors aren't exposed as `#selector` targets in Swift. Double-parenthesis syntax is required. `cut:`, `copy:`, `paste:`, `selectAll:` use `#selector(NSText.*)`.
+
+2. **`windowShouldClose` returns `false`** — TabManager handles actual close via `closeTab()` flow to avoid the use-after-free crash discovered in Phase 5. The `onWindowClose` callback bridges from NSWindowDelegate to TabManager.
+
+3. **URL bar container uses default `translatesAutoresizingMaskIntoConstraints = true`** — NSWindow manages contentView sizing, so the container view keeps the default. Only subviews (urlField, webView) use Auto Layout with `translatesAutoresizingMaskIntoConstraints = false`.
+
+4. **Sessions are NOT tied to socket connections** — A session persists until explicitly destroyed. Multiple connections can share a session if they know the sessionId. This allows agent reconnection.
+
+5. **Batch rejects nested batch** — If a sub-request method is `"batch"`, it returns an error for that sub-request to prevent recursion.
+
+6. **Default tab0 has no session** — It belongs to everyone (backward-compatible). Only tabs created with explicit `sessionId` are session-scoped.
+
+### Architecture
+
+New JSON-RPC methods: `session.create`, `session.destroy`, `batch`
+Modified methods: `tab.create` (accepts `sessionId`), `tab.list` (accepts `sessionId` filter)
+New RPC error code: `-32004` (session not found)

@@ -11,6 +11,7 @@ enum BrowserError: Error {
     case javaScriptError(String)
     case screenshotFailed(String)
     case tabNotFound(String)
+    case sessionNotFound(String)
     case timeout(String)
 
     var rpcError: RPCError {
@@ -25,6 +26,8 @@ enum BrowserError: Error {
             return .internalError("Screenshot failed: \(detail)")
         case .tabNotFound(let tabId):
             return .tabNotFound(tabId)
+        case .sessionNotFound(let sessionId):
+            return .sessionNotFound(sessionId)
         case .timeout(let detail):
             return .timeout(detail)
         }

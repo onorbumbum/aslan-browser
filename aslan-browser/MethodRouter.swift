@@ -56,7 +56,13 @@ class MethodRouter {
         case "tab.close":
             return try handleTabClose(params)
         case "tab.list":
-            return handleTabList()
+            return handleTabList(params)
+        case "session.create":
+            return handleSessionCreate(params)
+        case "session.destroy":
+            return try handleSessionDestroy(params)
+        case "batch":
+            return try await handleBatch(params)
         default:
             throw RPCError.methodNotFound(method)
         }
@@ -256,8 +262,9 @@ class MethodRouter {
         let width = params?["width"] as? Int ?? 1440
         let height = params?["height"] as? Int ?? 900
         let hidden = params?["hidden"] as? Bool
+        let sessionId = params?["sessionId"] as? String
 
-        let tabId = tabManager.createTab(width: width, height: height, hidden: hidden)
+        let tabId = tabManager.createTab(width: width, height: height, hidden: hidden, sessionId: sessionId)
 
         // If url provided, navigate after creation
         if let urlStr = params?["url"] as? String {
@@ -276,8 +283,69 @@ class MethodRouter {
         return ["ok": true]
     }
 
-    private func handleTabList() -> [String: Any] {
-        let tabs = tabManager.listTabs().map { $0.dict }
+    private func handleTabList(_ params: [String: Any]?) -> [String: Any] {
+        let sessionId = params?["sessionId"] as? String
+        let tabs = tabManager.listTabs(sessionId: sessionId).map { $0.dict }
         return ["tabs": tabs]
+    }
+
+    // MARK: - Session Methods
+
+    private func handleSessionCreate(_ params: [String: Any]?) -> [String: Any] {
+        let name = params?["name"] as? String
+        let sessionId = tabManager.createSession(name: name)
+        return ["sessionId": sessionId]
+    }
+
+    private func handleSessionDestroy(_ params: [String: Any]?) throws -> [String: Any] {
+        guard let sessionId = params?["sessionId"] as? String else {
+            throw RPCError.invalidParams("Missing required param: sessionId")
+        }
+        let closedTabs = try tabManager.destroySession(id: sessionId)
+        return ["ok": true, "closedTabs": closedTabs]
+    }
+
+    // MARK: - Batch Operations
+
+    private func handleBatch(_ params: [String: Any]?) async throws -> [String: Any] {
+        guard let requests = params?["requests"] as? [[String: Any]] else {
+            throw RPCError.invalidParams("Missing required param: requests (array)")
+        }
+
+        let responses = await withTaskGroup(of: (Int, [String: Any]).self) { group in
+            for (index, req) in requests.enumerated() {
+                group.addTask { @MainActor in
+                    guard let method = req["method"] as? String else {
+                        return (index, ["error": ["code": -32600, "message": "Missing method in batch request"]])
+                    }
+
+                    // Reject nested batch
+                    if method == "batch" {
+                        return (index, ["error": ["code": -32600, "message": "Nested batch not allowed"]])
+                    }
+
+                    let subParams = req["params"] as? [String: Any]
+                    do {
+                        let result = try await self.dispatch(method, params: subParams)
+                        return (index, ["result": result])
+                    } catch let err as RPCError {
+                        return (index, ["error": ["code": err.code, "message": err.message]])
+                    } catch let err as BrowserError {
+                        let rpcErr = err.rpcError
+                        return (index, ["error": ["code": rpcErr.code, "message": rpcErr.message]])
+                    } catch {
+                        return (index, ["error": ["code": -32603, "message": error.localizedDescription]])
+                    }
+                }
+            }
+
+            var results = [(Int, [String: Any])]()
+            for await result in group {
+                results.append(result)
+            }
+            return results.sorted { $0.0 < $1.0 }.map { $0.1 }
+        }
+
+        return ["responses": responses]
     }
 }

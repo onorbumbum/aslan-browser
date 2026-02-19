@@ -341,6 +341,7 @@ class AsyncAslanBrowser:
         width: int = 1440,
         height: int = 900,
         hidden: Optional[bool] = None,
+        session_id: Optional[str] = None,
     ) -> str:
         """Create a new tab. Returns the tab ID."""
         params: dict[str, Any] = {"width": width, "height": height}
@@ -348,6 +349,8 @@ class AsyncAslanBrowser:
             params["url"] = url
         if hidden is not None:
             params["hidden"] = hidden
+        if session_id:
+            params["sessionId"] = session_id
         result = await self._call("tab.create", params)
         return result["tabId"]
 
@@ -355,7 +358,105 @@ class AsyncAslanBrowser:
         """Close a tab."""
         await self._call("tab.close", {"tabId": tab_id})
 
-    async def tab_list(self) -> list[dict]:
-        """List all open tabs."""
-        result = await self._call("tab.list")
+    async def tab_list(self, session_id: Optional[str] = None) -> list[dict]:
+        """List all open tabs. Optionally filter by session."""
+        params: dict[str, Any] = {}
+        if session_id:
+            params["sessionId"] = session_id
+        result = await self._call("tab.list", params)
         return result.get("tabs", [])
+
+    # ── sessions ─────────────────────────────────────────────────────
+
+    async def session_create(self, name: Optional[str] = None) -> str:
+        """Create a new session. Returns the session ID."""
+        params: dict[str, Any] = {}
+        if name:
+            params["name"] = name
+        result = await self._call("session.create", params)
+        return result["sessionId"]
+
+    async def session_destroy(self, session_id: str) -> list[str]:
+        """Destroy a session and close all its tabs. Returns closed tab IDs."""
+        result = await self._call("session.destroy", {"sessionId": session_id})
+        return result.get("closedTabs", [])
+
+    # ── batch operations ─────────────────────────────────────────────
+
+    async def batch(self, requests: list[dict]) -> list[dict]:
+        """Execute multiple requests in one round-trip.
+
+        Args:
+            requests: List of {"method": ..., "params": ...} dicts.
+
+        Returns:
+            List of {"result": ...} or {"error": ...} dicts, in same order.
+        """
+        result = await self._call("batch", {"requests": requests})
+        return result.get("responses", [])
+
+    async def parallel_get_trees(self, tab_ids: list[str]) -> dict[str, list[dict]]:
+        """Get accessibility trees from multiple tabs in one call.
+
+        Returns:
+            Dict mapping tab_id → tree (list of A11yNode dicts).
+            If a tab errored, its value is an empty list.
+        """
+        requests = [
+            {"method": "getAccessibilityTree", "params": {"tabId": tid}}
+            for tid in tab_ids
+        ]
+        responses = await self.batch(requests)
+        result = {}
+        for tid, resp in zip(tab_ids, responses):
+            if "result" in resp:
+                result[tid] = resp["result"].get("tree", [])
+            else:
+                result[tid] = []
+        return result
+
+    async def parallel_navigate(
+        self,
+        urls: dict[str, str],
+        wait_until: str = "load",
+    ) -> dict[str, dict]:
+        """Navigate multiple tabs to different URLs in one call.
+
+        Args:
+            urls: Dict mapping tab_id → URL.
+            wait_until: "load", "idle", or "none".
+
+        Returns:
+            Dict mapping tab_id → {"url": ..., "title": ...} or {"error": ...}.
+        """
+        requests = [
+            {"method": "navigate", "params": {"tabId": tid, "url": url, "waitUntil": wait_until}}
+            for tid, url in urls.items()
+        ]
+        responses = await self.batch(requests)
+        result = {}
+        for (tid, _), resp in zip(urls.items(), responses):
+            if "result" in resp:
+                result[tid] = resp["result"]
+            else:
+                result[tid] = resp.get("error", {"message": "Unknown error"})
+        return result
+
+    async def parallel_screenshots(
+        self, tab_ids: list[str], quality: int = 70, width: int = 1440
+    ) -> dict[str, bytes]:
+        """Take screenshots of multiple tabs in one call.
+
+        Returns:
+            Dict mapping tab_id → JPEG bytes. Errored tabs omitted.
+        """
+        requests = [
+            {"method": "screenshot", "params": {"tabId": tid, "quality": quality, "width": width}}
+            for tid in tab_ids
+        ]
+        responses = await self.batch(requests)
+        result = {}
+        for tid, resp in zip(tab_ids, responses):
+            if "result" in resp and "data" in resp["result"]:
+                result[tid] = base64.b64decode(resp["result"]["data"])
+        return result

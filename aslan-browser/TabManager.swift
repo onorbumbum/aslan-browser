@@ -9,10 +9,19 @@ import WebKit
 @MainActor
 class TabManager {
 
+    struct Session {
+        let sessionId: String
+        let name: String
+    }
+
     private var tabs: [String: BrowserTab] = [:]
     private var nextId: Int = 0
     private let isHidden: Bool
     private var closingTabs: [BrowserTab] = [] // Prevent premature dealloc during window close
+
+    // Session tracking
+    private var sessions: [String: Session] = [:]
+    private var nextSessionId: Int = 0
 
     /// Callback for broadcasting events to all connected clients
     var broadcastEvent: ((_ method: String, _ params: [String: Any]) -> Void)?
@@ -21,8 +30,30 @@ class TabManager {
         self.isHidden = isHidden
     }
 
+    // MARK: - Sessions
+
+    func createSession(name: String? = nil) -> String {
+        let sessionId = "s\(nextSessionId)"
+        nextSessionId += 1
+        sessions[sessionId] = Session(sessionId: sessionId, name: name ?? sessionId)
+        return sessionId
+    }
+
+    func destroySession(id: String) throws -> [String] {
+        guard sessions.removeValue(forKey: id) != nil else {
+            throw BrowserError.sessionNotFound(id)
+        }
+        let tabIds = tabs.filter { $0.value.sessionId == id }.map { $0.key }
+        for tabId in tabIds {
+            try closeTab(id: tabId)
+        }
+        return tabIds
+    }
+
+    // MARK: - Tabs
+
     @discardableResult
-    func createTab(width: Int = 1440, height: Int = 900, hidden: Bool? = nil) -> String {
+    func createTab(width: Int = 1440, height: Int = 900, hidden: Bool? = nil, sessionId: String? = nil) -> String {
         let tabId = "tab\(nextId)"
         nextId += 1
 
@@ -35,6 +66,10 @@ class TabManager {
         tab.onEvent = { [weak self] method, params in
             self?.broadcastEvent?(method, params)
         }
+        tab.onWindowClose = { [weak self] tabId in
+            try? self?.closeTab(id: tabId)
+        }
+        tab.sessionId = sessionId
         tabs[tabId] = tab
         return tabId
     }
@@ -63,8 +98,9 @@ class TabManager {
         return tab
     }
 
-    func listTabs() -> [TabInfo] {
-        tabs.map { (id, tab) in
+    func listTabs(sessionId: String? = nil) -> [TabInfo] {
+        let filtered = sessionId == nil ? tabs : tabs.filter { $0.value.sessionId == sessionId }
+        return filtered.map { (id, tab) in
             TabInfo(
                 tabId: id,
                 url: tab.webView.url?.absoluteString ?? "",
