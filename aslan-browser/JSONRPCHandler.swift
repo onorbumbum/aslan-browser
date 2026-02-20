@@ -13,6 +13,11 @@ final class JSONRPCHandler: ChannelInboundHandler {
     private let router: MethodRouter
     private let server: SocketServer
 
+    // Per-connection session tracking: sessions created by this client
+    // are auto-destroyed when the connection drops (crash, disconnect).
+    private let sessionLock = NSLock()
+    private var ownedSessions: Set<String> = []
+
     init(router: MethodRouter, server: SocketServer) {
         self.router = router
         self.server = server
@@ -24,8 +29,43 @@ final class JSONRPCHandler: ChannelInboundHandler {
     }
 
     func channelInactive(context: ChannelHandlerContext) {
+        // Auto-cleanup: destroy any sessions created on this connection.
+        // This handles client crashes / ungraceful disconnects.
+        let sessions = drainOwnedSessions()
+        if !sessions.isEmpty {
+            let router = self.router
+            NSLog("[aslan-browser] Client disconnected — auto-destroying \(sessions.count) session(s): \(sessions)")
+            Task { @MainActor in
+                for sid in sessions {
+                    _ = try? await router.dispatch("session.destroy", params: ["sessionId": sid])
+                }
+            }
+        }
+
         server.removeClient(context.channel)
         context.fireChannelInactive()
+    }
+
+    // MARK: - Session Tracking
+
+    private func addOwnedSession(_ id: String) {
+        sessionLock.lock()
+        ownedSessions.insert(id)
+        sessionLock.unlock()
+    }
+
+    private func removeOwnedSession(_ id: String) {
+        sessionLock.lock()
+        ownedSessions.remove(id)
+        sessionLock.unlock()
+    }
+
+    private func drainOwnedSessions() -> Set<String> {
+        sessionLock.lock()
+        let result = ownedSessions
+        ownedSessions.removeAll()
+        sessionLock.unlock()
+        return result
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -62,6 +102,18 @@ final class JSONRPCHandler: ChannelInboundHandler {
         Task { @MainActor in
             do {
                 let result = try await router.dispatch(method, params: params)
+
+                // Track session lifecycle for per-connection cleanup
+                if method == "session.create",
+                   let dict = result as? [String: Any],
+                   let sid = dict["sessionId"] as? String {
+                    self.addOwnedSession(sid)
+                }
+                if method == "session.destroy",
+                   let sid = params?["sessionId"] as? String {
+                    self.removeOwnedSession(sid)
+                }
+
                 let response = RPCResponse(id: id, result: result)
                 let responseData = try response.serialize()
                 context.eventLoop.execute {

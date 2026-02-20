@@ -39,7 +39,7 @@ Run the setup step below. It loads discovered knowledge from past sessions so yo
 Read ALL of these files in full at session start. They are Tier 1 context — always needed.
 
 1. **SDK Reference** — what methods are available and how to call them:
-   `~/_PROJECTS/aslan-browser/aslan-browser/sdk/python/SDK_REFERENCE.md`
+   `SDK_REFERENCE.md`
 
 2. **Browser learnings** — gotchas and patterns discovered in past sessions (committed):
    `learnings/browser.md`
@@ -87,23 +87,27 @@ from aslan_browser import AslanBrowser
 
 b = AslanBrowser()
 # ... do work ...
-b.close()
+b.close()  # auto-closes all tabs created by this client
 ```
 
-Or with context manager:
+Or with context manager (preferred — auto-cleans on exit):
 
 ```python
 from aslan_browser import AslanBrowser
 
 with AslanBrowser() as b:
-    tab = b.tab_create()
+    tab = b.tab_create()  # auto-tracked
     b.navigate("https://example.com", tab_id=tab, wait_until="idle")
     text = b.evaluate("return document.body.innerText.substring(0, 3000)", tab_id=tab)
     print(text)
+# tab is automatically closed here — no cleanup needed
 ```
 
 **The SDK handles:**
 - Connection with retry
+- **Auto-session**: creates a session on connect, tags all `tab_create()` tabs to it, destroys session (closing all tabs) on `close()`
+- **Crash cleanup**: if your script crashes, the server detects the disconnect and auto-destroys the session
+- **Local tab tracking**: `b.owned_tabs` shows what tabs this client created
 - Event/notification interleaving (skips `event.navigation` automatically)
 - ID matching on responses
 - Proper error types (`AslanBrowserError` with code + message)
@@ -138,15 +142,14 @@ STEP 4 — Decide: What is the next single action?
 **Multi-tab research pattern:**
 ```python
 with AslanBrowser() as b:
-    sid = b.session_create(name="research")
-    tabs = [b.tab_create(session_id=sid) for _ in range(3)]
+    tabs = [b.tab_create() for _ in range(3)]  # auto-tagged to client session
     b.parallel_navigate({tabs[0]: url1, tabs[1]: url2, tabs[2]: url3})
     trees = b.parallel_get_trees(tabs)
     # ... process ...
-    b.session_destroy(sid)
+# all 3 tabs auto-closed on exit — no manual cleanup needed
 ```
 
-Use `session.create` + session-tagged `tab_create` when opening multiple tabs. Use `session_destroy` to clean up all at once.
+All tabs created via `tab_create()` are auto-tagged to the client's session. They're cleaned up when the `with` block exits or `close()` is called.
 
 Use `parallel_navigate` / `parallel_get_trees` / `batch` ONLY after you already know what to do with each tab. Not as a substitute for interactive exploration.
 
@@ -209,7 +212,7 @@ Ask yourself: *"If I had known this at the start of this session, would it have 
 ### How to append a learning:
 
 ```bash
-cat >> ~/.pi/agent/skills/aslan-browser/learnings/browser.md << 'EOF'
+cat >> learnings/browser.md << 'EOF'
 
 ## [Date] — [Topic]
 [What you discovered and why it matters]
@@ -217,7 +220,7 @@ EOF
 ```
 
 ```bash
-cat >> ~/.pi/agent/skills/aslan-browser/learnings/user.md << 'EOF'
+cat >> learnings/user.md << 'EOF'
 
 ## [Date] — [Topic]
 [What you discovered and why it matters]

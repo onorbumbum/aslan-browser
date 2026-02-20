@@ -244,14 +244,17 @@ The SDK Reference at [`sdk/python/SDK_REFERENCE.md`](sdk/python/SDK_REFERENCE.md
 
 ### Installing the Skill
 
-The skill needs to be accessible from your agent's skill directory. The cleanest approach is a **symlink** — one source of truth, edits go to one place, `git pull` updates the skill.
+Symlink the skill into your agent's skill directory. One source of truth — `git pull` updates the skill everywhere.
 
 ```bash
-# For pi agents (default skill path: ~/.pi/agent/skills/)
+# Claude Code
+ln -s /path/to/aslan-browser/skills/aslan-browser ~/.claude/skills/aslan-browser
+
+# pi
 ln -s /path/to/aslan-browser/skills/aslan-browser ~/.pi/agent/skills/aslan-browser
 ```
 
-Your agent framework may use a different skill directory. Point the symlink wherever your agent loads skills from.
+Other agent frameworks — point a symlink wherever your agent loads skills from. The skill uses relative paths internally, so it works from any location.
 
 ### How It Works
 

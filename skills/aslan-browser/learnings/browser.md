@@ -147,6 +147,37 @@ rpc('evaluate', {'tabId': 'tab0', 'script': '''
 
 ---
 
+## 2026-02-19 — SDK auto-session eliminates tab leaks (v1.2.0)
+
+As of SDK v0.2.0 / app v1.2.0, the Python SDK auto-creates a session on connect and tags every `tab_create()` call to it. When the `with` block exits or `close()` is called, `session.destroy` fires and all created tabs are closed.
+
+**Server-side belt-and-suspenders:** If the script crashes without calling `close()`, the server's `JSONRPCHandler` detects the socket disconnect and auto-destroys all sessions owned by that connection.
+
+**What this means for agents:**
+- You no longer need manual `session_create` / `session_destroy` for cleanup. Just use `with AslanBrowser() as b:` and `tab_create()`.
+- `b.owned_tabs` shows what this client has created.
+- `b.session_id` shows the auto-session ID.
+- `tab0` (the default startup tab) is NOT in any session — it survives cleanup.
+- To opt out: `AslanBrowser(auto_session=False)`.
+
+**Old pattern (still works but unnecessary):**
+```python
+sid = b.session_create(name="research")
+tabs = [b.tab_create(session_id=sid) for _ in range(3)]
+# ... work ...
+b.session_destroy(sid)
+```
+
+**New pattern (preferred):**
+```python
+with AslanBrowser() as b:
+    tabs = [b.tab_create() for _ in range(3)]
+    # ... work ...
+# all tabs auto-closed
+```
+
+---
+
 ## 2026-02-19 — File upload without native picker via DataTransfer API
 
 WKWebView file input clicks open a native macOS file picker that cannot be automated. Inject files via the DataTransfer API instead:
