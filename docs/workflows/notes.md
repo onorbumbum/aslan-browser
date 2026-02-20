@@ -556,3 +556,29 @@ Total socket calls for opening + reading 6 dentist pages: **5 calls** (create se
 
 ### Files Modified
 - `aslan-browser/BrowserTab.swift` — All changes in this single file
+
+---
+
+## Phase 9 — CLI
+
+**Status:** Complete ✅
+
+### Changes
+- Added `aslan` CLI tool (sdk/python/aslan_browser/cli.py, ~630 lines)
+- Entry point via pyproject.toml [project.scripts]
+- State file at /tmp/aslan-cli.json tracks current tab
+- 24 commands: status, source, nav, back, forward, reload, tree, title, url, text, eval, click, fill, select, key, scroll, shot, tabs, tab:new, tab:close, tab:use, tab:wait, cookies, set-cookie
+- CLI_REFERENCE.md — agent-facing cheat sheet (~190 lines)
+- Rewrote SKILL.md to teach CLI instead of Python SDK (~108 lines, down from ~300+)
+- Updated knowledge/core.md for CLI-specific gotchas
+- Integration tests in tests/test_cli.py (18 tests)
+
+### Token Impact
+- Per-interaction: ~200 tokens → ~30 tokens (85% reduction)
+- Skill context: ~5,000 tokens → ~2,600 tokens (~48% reduction)
+
+### Design Decisions
+1. **`auto_session=False` for CLI** — CLI is stateless per call. No session creation/teardown overhead. State tracked via `/tmp/aslan-cli.json` (current tab only).
+2. **Tab not found auto-recovery** — if current tab doesn't exist, reset to tab0 and retry once.
+3. **Compact output by default** — tree prints one line per node, nav prints title+URL. `--json` flag for programmatic access.
+4. **Zero new dependencies** — pure Python, wraps existing AslanBrowser SDK client.

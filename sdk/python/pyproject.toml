@@ -13,6 +13,9 @@ readme = "README.md"
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
 
+[project.scripts]
+aslan = "aslan_browser.cli:main"
+
 [tool.setuptools.packages.find]
 include = ["aslan_browser*"]
 
