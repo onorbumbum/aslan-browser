@@ -1,0 +1,91 @@
+{
+  "metadata": {
+    "phase": "4",
+    "name": "Accessibility Tree",
+    "description": "DOM walker for accessibility tree extraction, ref-based element interaction",
+    "projectRoot": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser",
+    "sourceDir": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser",
+    "xcodeprojPath": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser.xcodeproj",
+    "scheme": "aslan-browser",
+    "previousPhase": "3"
+  },
+  "workItems": [
+    {
+      "id": "a11y-model",
+      "status": "done",
+      "title": "Create A11yNode model",
+      "description": "Create Models/A11yNode.swift with a Codable struct: ref (String, e.g. '@e0'), role (String), name (String), tag (String), value (String?, for inputs), rect ({x, y, w, h} as doubles). This is the Swift representation of each node in the accessibility tree.",
+      "filesToCreate": [
+        "Models/A11yNode.swift"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "dom-walker",
+      "status": "done",
+      "title": "Implement DOM walker JS with role inference",
+      "description": "Add window.__agent.extractA11yTree() to ScriptBridge JS. Walk the DOM tree. For each element, determine its role: explicit role attribute takes priority, otherwise infer from tag (INPUT→textbox, A→link, BUTTON→button, SELECT→combobox, TEXTAREA→textbox, IMG→img, H1-H6→heading, NAV→navigation, MAIN→main, FORM→form, etc.). Skip hidden elements (display:none, visibility:hidden, aria-hidden='true', zero bounding rect). Include only interactive elements (links, buttons, inputs, selects, textareas), ARIA landmarks, and elements with explicit role attribute.",
+      "filesToModify": [
+        "ScriptBridge.swift"
+      ],
+      "dependsOn": [
+        "a11y-model"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "name-resolution",
+      "status": "done",
+      "title": "Implement accessible name resolution chain",
+      "description": "In the DOM walker JS, resolve each element's accessible name following this priority: aria-label → aria-labelledby (get text of referenced element) → associated <label> (via for/id or parent label) → placeholder attribute → title attribute → visible textContent (truncated to 80 chars, whitespace-collapsed). If no name can be resolved, use empty string.",
+      "filesToModify": [
+        "ScriptBridge.swift"
+      ],
+      "dependsOn": [
+        "dom-walker"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "ref-assignment",
+      "status": "done",
+      "title": "Implement ref assignment and data-agent-ref tagging",
+      "description": "In extractA11yTree(), assign sequential ref IDs (@e0, @e1, @e2, ...) to each discovered element. Set data-agent-ref attribute on the DOM element so it can be targeted later by click/fill/select. Refs reset on each extraction call (overwrite previous refs). Return the flat array of A11yNode-shaped objects.",
+      "filesToModify": [
+        "ScriptBridge.swift"
+      ],
+      "dependsOn": [
+        "name-resolution"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "a11y-method",
+      "status": "done",
+      "title": "Wire getAccessibilityTree as JSON-RPC method",
+      "description": "Add getAccessibilityTree() async method on BrowserTab that calls __agent.extractA11yTree() via callAsyncJavaScript and returns the result. Parse the JS result into [A11yNode]. Wire as JSON-RPC method 'getAccessibilityTree' in MethodRouter. The JSON-RPC response result is {tree: [{ref, role, name, tag, value, rect}, ...]}.",
+      "filesToModify": [
+        "BrowserTab.swift",
+        "MethodRouter.swift"
+      ],
+      "dependsOn": [
+        "ref-assignment"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "ref-interaction",
+      "status": "done",
+      "title": "Implement click/fill/select accepting @eN refs or CSS selectors",
+      "description": "Add click(target:), fill(target:value:), select(target:value:) methods on BrowserTab. The target parameter accepts either an @eN ref (resolved via [data-agent-ref='@eN']) or a CSS selector (used directly). click: querySelector → focus → click. fill: querySelector → set .value → dispatch 'input' and 'change' events. select: querySelector → set .value → dispatch 'change' event. Add keypress(key:modifiers:) and scroll(x:y:) methods. Wire all as JSON-RPC methods in MethodRouter.",
+      "filesToModify": [
+        "BrowserTab.swift",
+        "MethodRouter.swift"
+      ],
+      "dependsOn": [
+        "a11y-method"
+      ],
+      "verifyBuild": true
+    }
+  ]
+}

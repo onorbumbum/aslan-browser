@@ -1,0 +1,1500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Aslan Browser — Interactive Explorer</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface2: #21262d;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #7d8590;
+  --blue: #58a6ff;
+  --green: #3fb950;
+  --red: #f78166;
+  --purple: #d2a8ff;
+  --orange: #ffa657;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+}
+body {
+  background: var(--bg);
+  overflow: auto;
+}
+#app {
+  color: var(--text);
+  font-family: var(--font); font-size: 13px;
+  height: 100vh; display: flex; flex-direction: column;
+}
+
+/* ── Header ── */
+.hdr {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 16px; border-bottom: 1px solid var(--border);
+  background: var(--surface); flex-shrink: 0;
+}
+.hdr-logo {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--blue) 0%, var(--green) 100%);
+  display: flex; align-items: center; justify-content: center; font-size: 17px;
+}
+.hdr-name { font-weight: 700; font-size: 14px; }
+.hdr-sub  { font-size: 11px; color: var(--muted); }
+.presets  { display: flex; gap: 6px; margin-left: auto; }
+.pset-btn {
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--muted); padding: 4px 11px; border-radius: 6px;
+  cursor: pointer; font-size: 11px; font-family: var(--font);
+  transition: all .15s;
+}
+.pset-btn:hover { border-color: var(--blue); color: var(--blue); }
+.pset-btn.on { background: rgba(88,166,255,.1); border-color: var(--blue); color: var(--blue); }
+
+/* Zoom controls */
+.zoom-ctrls { display: flex; align-items: center; gap: 4px; margin-left: 14px; padding-left: 14px; border-left: 1px solid var(--border); }
+.zoom-btn {
+  background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+  width: 26px; height: 26px; border-radius: 6px; cursor: pointer; font-size: 14px;
+  font-family: var(--font); display: flex; align-items: center; justify-content: center;
+  transition: all .15s; line-height: 1; user-select: none;
+}
+.zoom-btn:hover { border-color: var(--blue); color: var(--blue); }
+.zoom-lbl { font-size: 11px; color: var(--muted); font-family: var(--mono); width: 36px; text-align: center; }
+
+/* ── Layout ── */
+.body { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ── */
+.nav {
+  width: 176px; background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 10px 8px; flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.nav-sect { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 10px 10px 4px; }
+.nav-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 12px; color: var(--muted); transition: all .15s;
+}
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+.nav-item.on  { background: rgba(88,166,255,.1); color: var(--blue); }
+.nav-ico { width: 16px; text-align: center; }
+
+/* ── Content ── */
+.content { flex: 1; overflow-y: auto; padding: 22px 24px; }
+.sect { display: none; }
+.sect.on { display: block; }
+
+/* ── Bottom bar ── */
+.btm {
+  border-top: 1px solid var(--border); background: var(--surface);
+  padding: 11px 16px; flex-shrink: 0;
+  display:none;
+}
+.btm-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 7px; }
+.btm-row { display: flex; gap: 10px; align-items: flex-start; }
+.prompt-txt {
+  flex: 1; font-family: var(--mono); font-size: 11px;
+  color: #c9d1d9; line-height: 1.55; min-height: 34px;
+}
+.copy-btn {
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--muted); padding: 5px 13px; border-radius: 6px;
+  cursor: pointer; font-size: 11px; font-family: var(--font);
+  white-space: nowrap; transition: all .15s; flex-shrink: 0;
+}
+.copy-btn:hover { border-color: var(--blue); color: var(--blue); }
+
+/* ════════════════════════════════════════════════
+   OVERVIEW
+   ════════════════════════════════════════════════ */
+.splash {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; min-height: calc(100vh - 160px);
+  padding: 40px 20px; text-align: center; gap: 28px;
+}
+.splash-logo { width: 90px; height: 90px; border-radius: 20px; object-fit: cover; }
+.splash h1 {
+  font-size: 36px; font-weight: 800; letter-spacing: -.5px;
+color:white;
+
+}
+.splash-line { font-size: 15px; color: var(--muted); max-width: 420px; line-height: 1.6; }
+.splash-stats { display: flex; gap: 2px; margin-top: 4px; }
+.stat-box {
+  padding: 18px 28px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 0; text-align: center;
+}
+.stat-box:first-child { border-radius: 9px 0 0 9px; }
+.stat-box:last-child  { border-radius: 0 9px 9px 0; }
+.stat-num { font-size: 24px; font-weight: 700; color: var(--text); font-family: var(--mono); }
+.stat-lbl { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.ic { font-family: var(--mono); font-size: 10.5px; background: var(--surface2); padding: 1px 5px; border-radius: 3px; color: #c9d1d9; }
+
+/* ════════════════════════════════════════════════
+   ARCHITECTURE
+   ════════════════════════════════════════════════ */
+.arch-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 18px; margin-bottom: 14px; }
+.arch-wrap svg { width: 100%; display: block; }
+.anode { cursor: pointer; }
+.anode rect, .anode polygon { transition: opacity .15s; }
+.anode:hover rect { opacity: .85; }
+.arch-detail { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 16px; min-height: 80px; }
+.arch-detail h3 { font-size: 13px; font-weight: 600; color: var(--blue); margin-bottom: 8px; }
+.arch-detail p { font-size: 12px; color: var(--muted); line-height: 1.65; }
+
+/* ════════════════════════════════════════════════
+   A11Y TREE
+   ════════════════════════════════════════════════ */
+.page-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.ptab {
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--muted); padding: 4px 11px; border-radius: 6px;
+  cursor: pointer; font-size: 11px; font-family: var(--font); transition: all .15s;
+}
+.ptab.on { border-color: var(--blue); color: var(--blue); background: rgba(88,166,255,.08); }
+.a11y-split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.a11y-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 16px; }
+.a11y-panel h3 { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 12px; }
+.fake-page {
+  background: white; border-radius: 7px; padding: 16px;
+  font-family: -apple-system, sans-serif; font-size: 12px; color: #1a1a1a;
+}
+.fake-page h2 { font-size: 15px; margin-bottom: 10px; color: #000; }
+.fake-page .flabel { font-size: 10.5px; color: #555; margin-top: 8px; display: block; }
+.fake-page input {
+  border: 1px solid #d0d7de; border-radius: 5px; padding: 5px 8px;
+  font-size: 12px; width: 100%; margin: 3px 0; display: block; color: #1a1a1a;
+}
+.fake-page button {
+  background: #0969da; color: white; border: none; border-radius: 6px;
+  padding: 6px 14px; font-size: 12px; cursor: default; margin: 4px 4px 4px 0;
+}
+.fake-page button.sec { background: #6c757d; }
+.fake-page a { color: #0969da; text-decoration: none; display: block; padding: 2px 0; }
+.tnode {
+  font-family: var(--mono); font-size: 11px;
+  padding: 3px 8px; border-radius: 5px; margin: 1px 0;
+  cursor: default; border-left: 2px solid transparent; transition: all .1s;
+}
+.tnode:hover { background: var(--surface2); }
+.tnode.hl { background: rgba(88,166,255,.08); border-left-color: var(--blue); }
+.tref  { color: var(--blue);   display: inline-block; width: 46px; }
+.trole { color: var(--purple); display: inline-block; width: 90px; }
+.tname { color: #c9d1d9; }
+.a11y-note {
+  margin-top: 12px; padding: 8px 10px; background: var(--surface2);
+  border-radius: 6px; font-size: 10.5px; color: var(--muted);
+}
+
+/* ════════════════════════════════════════════════
+   API BROWSER
+   ════════════════════════════════════════════════ */
+.api-wrap { display: grid; grid-template-columns: 162px 1fr; gap: 14px; }
+.api-cats { display: flex; flex-direction: column; gap: 2px; }
+.api-cat {
+  padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 12px; color: var(--muted); border: 1px solid transparent; transition: all .15s;
+}
+.api-cat:hover { background: var(--surface2); }
+.api-cat.on { background: var(--surface); border-color: var(--border); color: var(--text); }
+.api-right {}
+.api-methods { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.api-m {
+  padding: 13px 16px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background .1s;
+}
+.api-m:last-child { border-bottom: none; }
+.api-m:hover { background: var(--surface2); }
+.api-m-sig { font-family: var(--mono); font-size: 12px; margin-bottom: 4px; }
+.api-m-sig .mn { color: #c9d1d9; }
+.api-m-sig .ma { color: var(--muted); }
+.api-m-desc { font-size: 11.5px; color: var(--muted); }
+.api-detail { margin-top: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 16px; }
+.api-detail h3 { font-family: var(--mono); font-size: 13px; color: var(--blue); margin-bottom: 10px; }
+.api-detail .desc { font-size: 12px; color: var(--muted); line-height: 1.65; margin-bottom: 12px; }
+.api-detail pre {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 12px; font-family: var(--mono); font-size: 11px;
+  color: #c9d1d9; overflow-x: auto; white-space: pre-wrap;
+}
+
+/* ════════════════════════════════════════════════
+   WHY ASLAN
+   ════════════════════════════════════════════════ */
+.why-heading { margin-bottom: 24px; }
+.why-heading h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+.why-heading p  { font-size: 12px; color: var(--muted); }
+.why-rows { display: flex; flex-direction: column; gap: 2px; }
+.why-row {
+  display: grid; grid-template-columns: 160px 1fr 1fr; gap: 0;
+  border-radius: 0; overflow: hidden;
+}
+.why-row:first-child { border-radius: 9px 9px 0 0; }
+.why-row:last-child  { border-radius: 0 0 9px 9px; }
+.why-row + .why-row { border-top: 1px solid var(--bg); }
+.why-label {
+  background: var(--surface2); padding: 18px 16px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--muted);
+  display: flex; align-items: center;
+}
+.why-bad {
+  background: rgba(247,129,102,.06); border-left: 3px solid rgba(247,129,102,.3);
+  padding: 18px 20px;
+}
+.why-bad .why-col-lbl  { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--red); margin-bottom: 6px; font-weight: 600; }
+.why-bad .why-col-body { font-size: 13px; color: var(--text); line-height: 1.5; }
+.why-good {
+  background: rgba(63,185,80,.05); border-left: 3px solid rgba(63,185,80,.25);
+  padding: 18px 20px;
+}
+.why-good .why-col-lbl  { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--green); margin-bottom: 6px; font-weight: 600; }
+.why-good .why-col-body { font-size: 13px; color: var(--text); line-height: 1.5; }
+.why-note { margin-top: 14px; font-size: 12px; color: var(--muted); padding-left: 2px; }
+
+/* ════════════════════════════════════════════════
+   COMPARE
+   ════════════════════════════════════════════════ */
+.cmp-intro { margin-bottom: 16px; }
+.cmp-intro h2 { font-size: 18px; margin-bottom: 6px; }
+.cmp-intro p { font-size: 12px; color: var(--muted); line-height: 1.65; }
+.cmp-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.cmp-tbl { width: 100%; border-collapse: collapse; }
+.cmp-tbl th {
+  background: var(--surface2); padding: 10px 14px; text-align: left;
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.cmp-tbl th:first-child { width: 200px; }
+.cmp-tbl th.hl { background: rgba(63,185,80,.07); border-top: 2px solid var(--green); color: var(--green); }
+.cmp-tbl td { padding: 9px 14px; font-size: 12px; border-bottom: 1px solid rgba(48,54,61,.5); vertical-align: top; }
+.cmp-tbl tr:last-child td { border-bottom: none; }
+.cmp-tbl td.hl { background: rgba(63,185,80,.03); }
+.aslan { color: var(--green); font-weight: 500; }
+.bad   { color: var(--red); }
+
+/* ════════════════════════════════════════════════
+   QUICKSTART
+   ════════════════════════════════════════════════ */
+.qs-intro { margin-bottom: 18px; }
+.qs-intro h2 { font-size: 18px; margin-bottom: 6px; }
+.qs-intro p  { font-size: 12px; color: var(--muted); line-height: 1.65; }
+.steps { display: flex; flex-direction: column; gap: 14px; }
+.step { display: flex; gap: 14px; }
+.step-num {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  background: rgba(88,166,255,.1); border: 1px solid rgba(88,166,255,.3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: var(--blue);
+}
+.step-body h3 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.step-body p  { font-size: 12px; color: var(--muted); line-height: 1.65; }
+.step-body pre {
+  margin-top: 8px; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 7px; padding: 13px; font-family: var(--mono); font-size: 11px;
+  color: #c9d1d9; overflow-x: auto; white-space: pre-wrap;
+}
+.kw { color: var(--purple); }
+.st { color: var(--green); }
+.cm { color: var(--muted); }
+
+/* ════════════════════════════════════════════════
+   SKILL
+   ════════════════════════════════════════════════ */
+.skill-tabs { display:flex; gap:5px; margin-bottom:16px; }
+.skill-tab {
+  background:var(--surface2); border:1px solid var(--border);
+  color:var(--muted); padding:4px 13px; border-radius:6px;
+  cursor:pointer; font-size:11px; font-family:var(--font); transition:all .15s;
+}
+.skill-tab:hover { border-color:var(--purple); color:var(--purple); }
+.skill-tab.on { border-color:var(--purple); color:var(--purple); background:rgba(210,168,255,.08); }
+.skill-pane { display:none; }
+.skill-pane.on { display:block; }
+
+/* File tree */
+.ftree {
+  background:var(--surface); border:1px solid var(--border); border-radius:9px;
+  padding:18px 20px; font-family:var(--mono); font-size:11.5px; line-height:2.05;
+}
+.ftr { display:flex; align-items:baseline; gap:6px; border-radius:4px; padding:0 4px; transition:background .1s; }
+.ftr:hover { background:rgba(255,255,255,.04); }
+.fi { color:var(--border); }
+.fn { color:#c9d1d9; }
+.fn.d { color:var(--blue); }
+.fn.k { color:var(--green); }
+.fn.s { color:var(--orange); }
+.fn.p { color:var(--purple); }
+.fn.g { color:var(--muted); text-decoration:line-through; }
+.fc { margin-left:auto; font-size:10px; color:var(--muted); font-family:var(--font); }
+
+/* Commands table */
+.cmd-tbl { width:100%; border-collapse:collapse; background:var(--surface); border:1px solid var(--border); border-radius:9px; overflow:hidden; }
+.cmd-tbl th {
+  background:var(--surface2); padding:8px 14px; text-align:left;
+  font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted);
+  border-bottom:1px solid var(--border);
+}
+.cmd-tbl td { padding:8px 14px; font-size:11.5px; border-bottom:1px solid rgba(48,54,61,.4); vertical-align:middle; }
+.cmd-tbl tr:last-child td { border-bottom:none; }
+.cmd-tbl td:first-child { font-family:var(--mono); font-size:11px; color:#c9d1d9; white-space:nowrap; }
+.cmd-tbl td:nth-child(2) { color:var(--muted); font-size:11px; }
+.cmd-tbl td:last-child { font-size:10.5px; color:var(--muted); font-style:italic; }
+.cmd-tbl .grp td { background:var(--surface2); font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); padding:5px 14px; }
+.cmd-tbl .warn { color:var(--red) !important; font-style:normal !important; }
+
+/* Don'ts */
+.dont-wrap { display:flex; flex-direction:column; gap:10px; }
+.dont-row { display:grid; grid-template-columns:1fr 1fr; gap:0; border-radius:8px; overflow:hidden; }
+.dont-bad { background:rgba(247,129,102,.05); border-left:3px solid rgba(247,129,102,.35); padding:12px 16px; }
+.dont-good { background:rgba(63,185,80,.04); border-left:3px solid rgba(63,185,80,.25); padding:12px 16px; }
+.dont-lbl { font-size:9.5px; text-transform:uppercase; letter-spacing:.07em; margin-bottom:5px; font-weight:600; }
+.dont-bad .dont-lbl { color:var(--red); }
+.dont-good .dont-lbl { color:var(--green); }
+.dont-txt { font-family:var(--mono); font-size:11px; color:#c9d1d9; line-height:1.6; }
+.dont-txt.prose { font-family:var(--font); font-size:11.5px; }
+
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ── Header ─────────────────────────────────────────────── -->
+<div class="hdr">
+  <img src="https://github.com/onorbumbum/aslan-browser/raw/main/assets/logo.png" style="width:30px;height:30px;border-radius:8px;object-fit:cover;flex-shrink:0" onerror="this.style.display='none'">
+  <div>
+    <div class="hdr-name">Aslan Browser</div>
+    <div class="hdr-sub">browser for AI agents</div>
+  </div>
+
+
+</div>
+
+<!-- ── Body ───────────────────────────────────────────────── -->
+<div class="body">
+
+  <!-- Sidebar -->
+  <nav class="nav">
+    <div class="nav-sect">Explore</div>
+    <div class="nav-item on"  data-s="overview"      onclick="nav('overview')">Overview</div>
+    <div class="nav-item"     data-s="why"           onclick="nav('why')">Why Not Safari?</div>
+    <div class="nav-item"     data-s="architecture"  onclick="nav('architecture')">Architecture</div>
+    <div class="nav-item"     data-s="a11y"          onclick="nav('a11y')">A11y Tree</div>
+    <div class="nav-item"     data-s="api"           onclick="nav('api')">API Reference</div>
+    <div class="nav-item"     data-s="compare"       onclick="nav('compare')">vs Alternatives</div>
+    <div class="nav-item"     data-s="quickstart"    onclick="nav('quickstart')">Quick Start</div>
+    <div class="nav-item"     data-s="skill"         onclick="nav('skill')">The Skill</div>
+  </nav>
+
+  <!-- Content -->
+  <div class="content">
+
+    <!-- ══ OVERVIEW ══════════════════════════════════════════ -->
+    <div class="sect on" id="s-overview">
+      <div class="splash">
+        <img src="https://github.com/onorbumbum/aslan-browser/raw/main/assets/logo.png" class="splash-logo"
+             onerror="this.style.display='none'">
+        <h1>Aslan Browser</h1>
+        <p class="splash-line">A browser for AI agents. macOS native. No Chrome. Returns an accessibility tree instead of the raw DOM.</p>
+        <div class="splash-stats">
+          <div class="stat-box"><div class="stat-num">~0.5ms</div><div class="stat-lbl">JS eval</div></div>
+          <div class="stat-box"><div class="stat-num">~15ms</div><div class="stat-lbl">screenshot</div></div>
+          <div class="stat-box"><div class="stat-num">0</div><div class="stat-lbl">Python deps</div></div>
+          <div class="stat-box"><div class="stat-num">~2.6k</div><div class="stat-lbl">lines total</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ WHY ASLAN ═════════════════════════════════════════ -->
+    <div class="sect" id="s-why">
+      <div class="why-heading">
+        <h2>Why not just use Safari?</h2>
+        <p>Safari has native automation. It doesn't work for agents.</p>
+      </div>
+      <div class="why-rows">
+
+        <div class="why-row">
+          <div class="why-label">User interaction</div>
+          <div class="why-bad">
+            <div class="why-col-lbl">Safari</div>
+            <div class="why-col-body">Glass pane. A transparent shield blocks all clicks while automation runs. You can't touch the window.</div>
+          </div>
+          <div class="why-good">
+            <div class="why-col-lbl">Aslan</div>
+            <div class="why-col-body">No glass pane. You and the agent share the same browser. Click something it missed, type a password, hand it back.</div>
+          </div>
+        </div>
+
+        <div class="why-row">
+          <div class="why-label">Login state</div>
+          <div class="why-bad">
+            <div class="why-col-lbl">Safari</div>
+            <div class="why-col-body">Forced private mode. No cookies, no history, no local storage. Your agent logs in from scratch every time. 2FA every time.</div>
+          </div>
+          <div class="why-good">
+            <div class="why-col-lbl">Aslan</div>
+            <div class="why-col-body">Persistent profile. Stays logged in between sessions. Same as a real user.</div>
+          </div>
+        </div>
+
+        <div class="why-row">
+          <div class="why-label">Speed</div>
+          <div class="why-bad">
+            <div class="why-col-lbl">Safari / WebDriver</div>
+            <div class="why-col-body">HTTP over TCP. Every command is a network request to a local server. 10–50ms per action.</div>
+          </div>
+          <div class="why-good">
+            <div class="why-col-lbl">Aslan</div>
+            <div class="why-col-body">Unix domain socket — a file on disk acting as a pipe. OS-level IPC. ~0.5ms per action.</div>
+          </div>
+        </div>
+
+        <div class="why-row">
+          <div class="why-label">Page data</div>
+          <div class="why-bad">
+            <div class="why-col-lbl">Safari / AppleScript</div>
+            <div class="why-col-body">Raw HTML. Your LLM gets <code class="ic">&lt;div&gt;&lt;span class="wrapper"&gt;...&lt;/span&gt;&lt;/div&gt;</code> soup. Expensive and hard to reason about.</div>
+          </div>
+          <div class="why-good">
+            <div class="why-col-lbl">Aslan</div>
+            <div class="why-col-body">Accessibility tree baked in. A flat list of what's actually on the page. 10–100x fewer tokens.</div>
+          </div>
+        </div>
+
+      </div>
+      <p class="why-note">Safari automation was built for testing websites. Aslan was built for operating them.</p>
+    </div>
+
+    <!-- ══ ARCHITECTURE ═══════════════════════════════════════ -->
+    <div class="sect" id="s-architecture">
+      <div class="arch-wrap">
+        <svg viewBox="0 0 720 310" height="310">
+          <defs>
+            <marker id="arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+              <polygon points="0 0,8 3,0 6" fill="#30363d"/>
+            </marker>
+            <marker id="arr2" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+              <polygon points="0 0,8 3,0 6" fill="#30363d" opacity=".5"/>
+            </marker>
+          </defs>
+
+          <!-- Python SDK -->
+          <g class="anode" onclick="archDetail('sdk')">
+            <rect x="14" y="105" width="132" height="60" rx="8" fill="#0d1117" stroke="#58a6ff" stroke-width="1.5"/>
+            <text x="80" y="127" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="700" font-family="system-ui">Python SDK-CLI</text>
+            <text x="80" y="142" text-anchor="middle" fill="#7d8590" font-size="9" font-family="system-ui">AslanBrowser()</text>
+            <text x="80" y="154" text-anchor="middle" fill="#7d8590" font-size="9" font-family="system-ui">AsyncAslanBrowser()</text>
+          </g>
+
+          <!-- connector label -->
+          <line x1="146" y1="135" x2="196" y2="135" stroke="#30363d" stroke-width="1.5" marker-end="url(#arr)"/>
+          <text x="171" y="127" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">Unix socket</text>
+          <text x="171" y="146" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">NDJSON JSON-RPC</text>
+
+          <!-- macOS App outer box -->
+          <rect x="196" y="16" width="322" height="272" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+          <text x="357" y="34" text-anchor="middle" fill="#7d8590" font-size="9" font-style="italic" font-family="system-ui">aslan-browser.app (macOS native · Swift 6.2)</text>
+
+          <!-- SocketServer -->
+          <g class="anode" onclick="archDetail('socket')">
+            <rect x="212" y="44" width="138" height="38" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.5"/>
+            <text x="281" y="60" text-anchor="middle" fill="#e6edf3" font-size="10.5" font-weight="600" font-family="system-ui">SocketServer</text>
+            <text x="281" y="74" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">SwiftNIO · /tmp/aslan-browser.sock</text>
+          </g>
+
+          <!-- JSONRPCHandler -->
+          <g class="anode" onclick="archDetail('rpc')">
+            <rect x="212" y="98" width="138" height="38" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.5"/>
+            <text x="281" y="114" text-anchor="middle" fill="#e6edf3" font-size="10.5" font-weight="600" font-family="system-ui">JSONRPCHandler</text>
+            <text x="281" y="128" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">parse · validate · respond</text>
+          </g>
+
+          <!-- MethodRouter -->
+          <g class="anode" onclick="archDetail('router')">
+            <rect x="212" y="152" width="138" height="38" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.5"/>
+            <text x="281" y="168" text-anchor="middle" fill="#e6edf3" font-size="10.5" font-weight="600" font-family="system-ui">MethodRouter</text>
+            <text x="281" y="182" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">maps method strings → actions</text>
+          </g>
+
+          <!-- TabManager -->
+          <g class="anode" onclick="archDetail('tabmgr')">
+            <rect x="212" y="206" width="138" height="38" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.5"/>
+            <text x="281" y="222" text-anchor="middle" fill="#e6edf3" font-size="10.5" font-weight="600" font-family="system-ui">TabManager</text>
+            <text x="281" y="236" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">tabs · sessions · lifecycle</text>
+          </g>
+
+          <!-- Vertical arrows inside app -->
+          <line x1="281" y1="82"  x2="281" y2="98"  stroke="#30363d" stroke-width="1.5" marker-end="url(#arr)"/>
+          <line x1="281" y1="136" x2="281" y2="152" stroke="#30363d" stroke-width="1.5" marker-end="url(#arr)"/>
+          <line x1="281" y1="190" x2="281" y2="206" stroke="#30363d" stroke-width="1.5" marker-end="url(#arr)"/>
+
+          <!-- Arrow to BrowserTab -->
+          <line x1="350" y1="225" x2="415" y2="195" stroke="#30363d" stroke-width="1.5" marker-end="url(#arr)"/>
+
+          <!-- BrowserTab -->
+          <g class="anode" onclick="archDetail('tab')">
+            <rect x="413" y="110" width="72" height="128" rx="8" fill="#0d1117" stroke="#3fb950" stroke-width="1.5"/>
+            <text x="449" y="132" text-anchor="middle" fill="#3fb950" font-size="10.5" font-weight="700" font-family="system-ui">Browser</text>
+            <text x="449" y="146" text-anchor="middle" fill="#3fb950" font-size="10.5" font-weight="700" font-family="system-ui">Tab</text>
+            <text x="449" y="164" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">WKWebView</text>
+            <text x="449" y="177" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">navigate</text>
+            <text x="449" y="190" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">screenshot</text>
+            <text x="449" y="203" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">a11y tree</text>
+            <text x="449" y="216" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">JS eval</text>
+            <text x="449" y="229" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">interact</text>
+          </g>
+
+          <!-- ScriptBridge -->
+          <g class="anode" onclick="archDetail('bridge')">
+            <rect x="497" y="148" width="118" height="40" rx="7" fill="#0d1117" stroke="#d2a8ff" stroke-width="1.5"/>
+            <text x="556" y="165" text-anchor="middle" fill="#d2a8ff" font-size="10.5" font-weight="600" font-family="system-ui">ScriptBridge</text>
+            <text x="556" y="179" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">injected JS ↔ Swift</text>
+          </g>
+          <line x1="485" y1="168" x2="497" y2="168" stroke="#30363d" stroke-width="1.5" marker-end="url(#arr)"/>
+
+          <!-- Web -->
+          <line x1="485" y1="140" x2="582" y2="74" stroke="#30363d" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arr2)"/>
+          <g class="anode" onclick="archDetail('web')">
+            <rect x="560" y="46" width="106" height="36" rx="7" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+            <text x="613" y="62" text-anchor="middle" fill="#7d8590" font-size="11" font-family="system-ui">The Web</text>
+            <text x="613" y="74" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">any URL, full JS support</text>
+          </g>
+
+          <!-- hint -->
+          <text x="357" y="298" text-anchor="middle" fill="#7d8590" font-size="9" font-family="system-ui">↑ Click any component to learn about it</text>
+        </svg>
+      </div>
+
+      <div class="arch-detail" id="arch-detail">
+        <h3>Click a component above</h3>
+      </div>
+    </div>
+
+    <!-- ══ A11Y TREE ══════════════════════════════════════════ -->
+    <div class="sect" id="s-a11y">
+      <div class="page-tabs">
+        <button class="ptab on" onclick="a11yPage('login',this)">Login Form</button>
+        <button class="ptab"    onclick="a11yPage('search',this)">Search Page</button>
+        <button class="ptab"    onclick="a11yPage('article',this)">Article Page</button>
+        <button class="ptab"    onclick="a11yPage('settings',this)">Settings</button>
+      </div>
+      <div class="a11y-split">
+        <div class="a11y-panel">
+          <h3>Rendered Page (what the user sees)</h3>
+          <div id="fake-page"></div>
+          <div class="a11y-note">Hover over tree nodes on the right to see which element they map to.</div>
+        </div>
+        <div class="a11y-panel">
+          <h3>Accessibility Tree → browser.get_accessibility_tree()</h3>
+          <div id="tree-out"></div>
+          <div class="a11y-note">Use <span style="font-family:var(--mono);color:var(--blue)">@eN</span> refs in <span style="font-family:var(--mono);color:var(--blue)">click()</span>, <span style="font-family:var(--mono);color:var(--blue)">fill()</span>, etc. — this is what you send to the LLM.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ API REFERENCE ══════════════════════════════════════ -->
+    <div class="sect" id="s-api">
+      <div class="api-wrap">
+        <div class="api-cats" id="api-cats"></div>
+        <div class="api-right">
+          <div class="api-methods" id="api-methods"></div>
+          <div class="api-detail" id="api-detail" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ COMPARE ════════════════════════════════════════════ -->
+    <div class="sect" id="s-compare">
+      <div class="cmp-intro">
+        <h2>Aslan vs. Alternatives</h2>
+      </div>
+      <div class="cmp-wrap">
+        <table class="cmp-tbl">
+          <thead>
+            <tr>
+              <th>Capability</th>
+              <th class="hl">Aslan Browser</th>
+              <th>Playwright</th>
+              <th>Puppeteer</th>
+              <th>Selenium</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Rendering engine</td>
+              <td class="hl aslan">WKWebView (macOS native)</td>
+              <td>Chromium / Firefox / WebKit</td>
+              <td>Chrome / Chromium</td>
+              <td>Any via WebDriver</td>
+            </tr>
+            <tr>
+              <td>Browser download needed</td>
+              <td class="hl aslan">None — system WKWebView</td>
+              <td class="bad">~500MB Chromium</td>
+              <td class="bad">~500MB Chrome</td>
+              <td class="bad">Full browser required</td>
+            </tr>
+            <tr>
+              <td>Page representation for AI</td>
+              <td class="hl aslan">Accessibility tree (compact)</td>
+              <td class="bad">Full DOM</td>
+              <td class="bad">Full DOM</td>
+              <td class="bad">Full DOM</td>
+            </tr>
+            <tr>
+              <td>Token usage for LLM</td>
+              <td class="hl aslan">10–100× fewer tokens</td>
+              <td class="bad">Very high (raw DOM)</td>
+              <td class="bad">Very high (raw DOM)</td>
+              <td class="bad">Very high (raw DOM)</td>
+            </tr>
+            <tr>
+              <td>JS eval round-trip</td>
+              <td class="hl aslan">~0.5ms</td>
+              <td>2–5ms</td>
+              <td>2–5ms</td>
+              <td class="bad">5–20ms</td>
+            </tr>
+            <tr>
+              <td>Screenshot latency</td>
+              <td class="hl aslan">~15ms</td>
+              <td>50–150ms</td>
+              <td>50–150ms</td>
+              <td class="bad">200ms+</td>
+            </tr>
+            <tr>
+              <td>Memory per tab</td>
+              <td class="hl aslan">~40MB</td>
+              <td>80–150MB</td>
+              <td>80–150MB</td>
+              <td class="bad">150MB+</td>
+            </tr>
+            <tr>
+              <td>Cold start</td>
+              <td class="hl aslan">&lt;500ms</td>
+              <td>2–5s</td>
+              <td>2–5s</td>
+              <td class="bad">5–10s</td>
+            </tr>
+            <tr>
+              <td>Python dependencies</td>
+              <td class="hl aslan">Zero (stdlib only)</td>
+              <td class="bad">playwright package</td>
+              <td class="bad">pyppeteer package</td>
+              <td class="bad">selenium + webdriver</td>
+            </tr>
+            <tr>
+              <td>Multi-tab &amp; sessions</td>
+              <td class="hl aslan">Built-in (tab_create, session_create)</td>
+              <td>Yes</td>
+              <td>Yes</td>
+              <td>Partial</td>
+            </tr>
+            <tr>
+              <td>Parallel batch ops</td>
+              <td class="hl aslan">parallel_navigate / parallel_get_trees</td>
+              <td>Yes (async)</td>
+              <td>Yes (async)</td>
+              <td class="bad">Limited</td>
+            </tr>
+            <tr>
+              <td>AI agent skill</td>
+              <td class="hl aslan">Built-in (Prompts-are-Code)</td>
+              <td class="bad">None</td>
+              <td class="bad">None</td>
+              <td class="bad">None</td>
+            </tr>
+            <tr>
+              <td>Platform</td>
+              <td class="hl bad">macOS 14+ only</td>
+              <td>Cross-platform</td>
+              <td>Cross-platform</td>
+              <td>Cross-platform</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ QUICKSTART ═════════════════════════════════════════ -->
+    <div class="sect" id="s-quickstart">
+      <div class="qs-intro">
+        <h2>Quick Start</h2>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h3>Build or download the app</h3>
+            <p>Build with Xcode, or grab a pre-built universal binary from GitHub Releases (arm64 + x86_64).</p>
+            <pre>git clone https://github.com/onorbumbum/aslan-browser.git
+cd aslan-browser
+xcodebuild build -scheme aslan-browser -configuration Debug -derivedDataPath .build</pre>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h3>Install the Python SDK</h3>
+            <p>Zero external dependencies — only stdlib. Works with Python 3.10+.</p>
+            <pre>pip install -e sdk/python   # from source (PyPI coming soon)</pre>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <h3>Start the browser</h3>
+            <p>The app listens on <span class="ic">/tmp/aslan-browser.sock</span>. Use <span class="ic">--hidden</span> for headless production use.</p>
+            <pre>.build/Build/Products/Debug/aslan-browser.app/Contents/MacOS/aslan-browser --hidden</pre>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <h3>Navigate → Read → Act</h3>
+            <pre><span class="kw">from</span> aslan_browser <span class="kw">import</span> AslanBrowser
+
+<span class="kw">with</span> AslanBrowser() <span class="kw">as</span> browser:
+    <span class="cm"># 1. Navigate and wait for the page to be ready</span>
+    browser.navigate(<span class="st">"https://github.com/login"</span>, wait_until=<span class="st">"idle"</span>)
+
+    <span class="cm"># 2. Read the page — compact accessibility tree, send to LLM</span>
+    tree = browser.get_accessibility_tree()
+    <span class="kw">for</span> node <span class="kw">in</span> tree:
+        print(node[<span class="st">'ref'</span>], node[<span class="st">'role'</span>], node[<span class="st">'name'</span>])
+    <span class="cm"># @e0  textbox  "Username or email address"</span>
+    <span class="cm"># @e1  textbox  "Password"</span>
+    <span class="cm"># @e2  button   "Sign in"</span>
+
+    <span class="cm"># 3. Act using @eN refs the LLM selected</span>
+    browser.fill(<span class="st">"@e0"</span>, <span class="st">"myusername"</span>)
+    browser.fill(<span class="st">"@e1"</span>, <span class="st">"mypassword"</span>)
+    browser.click(<span class="st">"@e2"</span>)
+
+    <span class="cm"># 4. Screenshot for vision models (JPEG bytes, ~15ms)</span>
+    browser.save_screenshot(<span class="st">"result.jpg"</span>)</pre>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <h3>Install the AI agent skill (optional)</h3>
+            <p>Symlink the bundled skill into your agent's skill directory. One source of truth — <span class="ic">git pull</span> updates it everywhere.</p>
+            <pre><span class="cm"># For pi / ASLAN</span>
+ln -s /path/to/aslan-browser/skills/aslan-browser ~/.pi/agent/skills/aslan-browser
+
+<span class="cm"># For Claude Code</span>
+ln -s /path/to/aslan-browser/skills/aslan-browser ~/.claude/skills/aslan-browser</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ══ SKILL ══════════════════════════════════════════════ -->
+    <div class="sect" id="s-skill">
+
+      <div class="skill-tabs">
+        <button class="skill-tab on" onclick="skillTab('flow',this)">Session Flow</button>
+        <button class="skill-tab"    onclick="skillTab('files',this)">File Map</button>
+        <button class="skill-tab"    onclick="skillTab('cmds',this)">Commands</button>
+        <button class="skill-tab"    onclick="skillTab('donts',this)">Don'ts</button>
+      </div>
+
+      <!-- ─ Session Flow ─ -->
+      <div class="skill-pane on" id="sk-flow">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:18px;">
+          <svg viewBox="0 0 720 228" width="100%" style="display:block">
+            <defs>
+              <marker id="sa" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0,8 3,0 6" fill="#30363d"/>
+              </marker>
+              <marker id="sa2" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0,8 3,0 6" fill="#58a6ff" opacity=".6"/>
+              </marker>
+            </defs>
+
+            <!-- SETUP box -->
+            <rect x="6" y="14" width="124" height="196" rx="8" fill="#0d1117" stroke="#58a6ff" stroke-width="1.5"/>
+            <text x="68" y="36" text-anchor="middle" fill="#58a6ff" font-size="10" font-weight="700" font-family="system-ui" letter-spacing=".08em">SETUP</text>
+            <text x="68" y="56"  text-anchor="middle" fill="#7d8590" font-size="9.5" font-family="monospace">SDK_REFERENCE.md</text>
+            <text x="68" y="72"  text-anchor="middle" fill="#7d8590" font-size="9.5" font-family="monospace">core.md</text>
+            <text x="68" y="88"  text-anchor="middle" fill="#7d8590" font-size="9.5" font-family="monospace">user.md</text>
+            <text x="68" y="108" text-anchor="middle" fill="#7d8590" font-size="9"   font-family="system-ui">check sites/ &amp; playbooks/</text>
+            <line x1="24" y1="120" x2="112" y2="120" stroke="#21262d" stroke-width="1"/>
+            <text x="68" y="140" text-anchor="middle" fill="#7d8590" font-size="9.5" font-family="monospace">aslan status</text>
+            <text x="68" y="157" text-anchor="middle" fill="#7d8590" font-size="9"   font-family="system-ui">must print "Connected"</text>
+
+            <!-- Arrow SETUP → loop -->
+            <line x1="132" y1="112" x2="152" y2="112" stroke="#30363d" stroke-width="1.5" marker-end="url(#sa)"/>
+
+            <!-- Loop background -->
+            <rect x="156" y="14" width="366" height="196" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+            <text x="339" y="30" text-anchor="middle" fill="#7d8590" font-size="9" font-family="system-ui" font-style="italic">repeat until done</text>
+
+            <!-- Step 1: Orient -->
+            <rect x="166" y="38" width="78" height="132" rx="6" fill="#0d1117" stroke="#58a6ff" stroke-width="1.5"/>
+            <text x="205" y="57"  text-anchor="middle" fill="#58a6ff" font-size="9"   font-family="system-ui" font-weight="700">ORIENT</text>
+            <text x="205" y="74"  text-anchor="middle" fill="#7d8590" font-size="9"   font-family="monospace">aslan tabs</text>
+            <text x="205" y="88"  text-anchor="middle" fill="#7d8590" font-size="9"   font-family="monospace">aslan url</text>
+            <text x="205" y="102" text-anchor="middle" fill="#7d8590" font-size="9"   font-family="monospace">aslan title</text>
+            <text x="205" y="122" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">where am I?</text>
+            <text x="205" y="135" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">what tab is active?</text>
+
+            <!-- Arrow 1→2 -->
+            <line x1="244" y1="104" x2="258" y2="104" stroke="#30363d" stroke-width="1.5" marker-end="url(#sa)"/>
+
+            <!-- Step 2: Act -->
+            <rect x="262" y="38" width="78" height="132" rx="6" fill="#0d1117" stroke="#ffa657" stroke-width="1.5"/>
+            <text x="301" y="57"  text-anchor="middle" fill="#ffa657" font-size="9"   font-family="system-ui" font-weight="700">ACT</text>
+            <text x="301" y="74"  text-anchor="middle" fill="#7d8590" font-size="9"   font-family="monospace">aslan nav</text>
+            <text x="301" y="88"  text-anchor="middle" fill="#7d8590" font-size="9"   font-family="monospace">aslan click</text>
+            <text x="301" y="102" text-anchor="middle" fill="#7d8590" font-size="9"   font-family="monospace">aslan fill</text>
+            <text x="301" y="116" text-anchor="middle" fill="#7d8590" font-size="9"   font-family="monospace">aslan key</text>
+            <text x="301" y="135" text-anchor="middle" fill="#ffa657" font-size="8"   font-family="system-ui">ONE action only</text>
+
+            <!-- Arrow 2→3 -->
+            <line x1="340" y1="104" x2="354" y2="104" stroke="#30363d" stroke-width="1.5" marker-end="url(#sa)"/>
+
+            <!-- Step 3: Read -->
+            <rect x="358" y="38" width="78" height="132" rx="6" fill="#0d1117" stroke="#3fb950" stroke-width="1.5"/>
+            <text x="397" y="57"  text-anchor="middle" fill="#3fb950" font-size="9"   font-family="system-ui" font-weight="700">READ</text>
+            <text x="397" y="74"  text-anchor="middle" fill="#7d8590" font-size="9"   font-family="monospace">aslan tree</text>
+            <text x="397" y="88"  text-anchor="middle" fill="#7d8590" font-size="9"   font-family="monospace">aslan text</text>
+            <text x="397" y="102" text-anchor="middle" fill="#7d8590" font-size="9"   font-family="monospace">aslan title</text>
+            <text x="397" y="122" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">what happened?</text>
+            <text x="397" y="135" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">did it work?</text>
+
+            <!-- Arrow 3→4 -->
+            <line x1="436" y1="104" x2="450" y2="104" stroke="#30363d" stroke-width="1.5" marker-end="url(#sa)"/>
+
+            <!-- Step 4: Decide -->
+            <rect x="454" y="38" width="58" height="132" rx="6" fill="#0d1117" stroke="#d2a8ff" stroke-width="1.5"/>
+            <text x="483" y="57"  text-anchor="middle" fill="#d2a8ff" font-size="9"   font-family="system-ui" font-weight="700">DECIDE</text>
+            <text x="483" y="78"  text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">next action?</text>
+            <text x="483" y="93"  text-anchor="middle" fill="#ffa657" font-size="8.5" font-family="system-ui">→ loop</text>
+            <text x="483" y="110" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">task done?</text>
+            <text x="483" y="125" text-anchor="middle" fill="#3fb950" font-size="8.5" font-family="system-ui">→ compile</text>
+
+            <!-- Loop back arrow: Decide bottom → Act bottom -->
+            <path d="M 483 170 C 483 196 301 196 301 170" fill="none" stroke="#ffa657" stroke-width="1" stroke-dasharray="4 3" opacity=".5" marker-end="url(#sa2)"/>
+            <text x="392" y="210" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui" font-style="italic">loop back to Act</text>
+
+            <!-- Arrow loop → COMPILE -->
+            <line x1="524" y1="112" x2="542" y2="112" stroke="#30363d" stroke-width="1.5" marker-end="url(#sa)"/>
+
+            <!-- COMPILE box -->
+            <rect x="546" y="14" width="168" height="196" rx="8" fill="#0d1117" stroke="#3fb950" stroke-width="1.5"/>
+            <text x="630" y="36" text-anchor="middle" fill="#3fb950" font-size="10" font-weight="700" font-family="system-ui" letter-spacing=".08em">COMPILE</text>
+            <text x="630" y="54"  text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">route every discovery:</text>
+            <text x="630" y="74"  text-anchor="middle" fill="#58a6ff" font-size="9"   font-family="monospace">core.md</text>
+            <text x="630" y="87"  text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">universal CLI/browser rules</text>
+            <text x="630" y="107" text-anchor="middle" fill="#ffa657" font-size="9"   font-family="monospace">sites/{domain}.md</text>
+            <text x="630" y="120" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">site-specific selectors</text>
+            <text x="630" y="140" text-anchor="middle" fill="#d2a8ff" font-size="9"   font-family="monospace">playbooks/</text>
+            <text x="630" y="153" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">repeatable task recipe</text>
+            <text x="630" y="173" text-anchor="middle" fill="#3fb950" font-size="9"   font-family="monospace">user.md</text>
+            <text x="630" y="186" text-anchor="middle" fill="#7d8590" font-size="8.5" font-family="system-ui">user preferences</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- ─ File Map ─ -->
+      <div class="skill-pane" id="sk-files">
+        <div class="ftree">
+          <div class="ftr"><span class="fn d">skills/aslan-browser/</span></div>
+          <div class="ftr"><span class="fi">├── </span><span class="fn k">SKILL.md</span><span class="fc">protocol + rules — loaded every invocation</span></div>
+          <div class="ftr"><span class="fi">├── </span><span class="fn k">SDK_REFERENCE.md</span><span class="fc">full CLI reference — loaded every session</span></div>
+          <div class="ftr"><span class="fi">├── </span><span class="fn d">knowledge/</span></div>
+          <div class="ftr"><span class="fi">│   ├── </span><span class="fn k">core.md</span><span class="fc">universal rules — loaded every session</span></div>
+          <div class="ftr"><span class="fi">│   ├── </span><span class="fn g">user.md</span><span class="fc">user prefs — gitignored</span></div>
+          <div class="ftr"><span class="fi">│   ├── </span><span class="fn d">sites/</span><span class="fc">loaded when visiting that domain</span></div>
+          <div class="ftr"><span class="fi">│   │   ├── </span><span class="fn s">linkedin.com.md</span></div>
+          <div class="ftr"><span class="fi">│   │   ├── </span><span class="fn s">instagram.com.md</span></div>
+          <div class="ftr"><span class="fi">│   │   ├── </span><span class="fn s">facebook.com.md</span></div>
+          <div class="ftr"><span class="fi">│   │   ├── </span><span class="fn s">business.google.com.md</span></div>
+          <div class="ftr"><span class="fi">│   │   ├── </span><span class="fn s">hubspot.com.md</span></div>
+          <div class="ftr"><span class="fi">│   │   ├── </span><span class="fn s">app.hubspot.com.md</span></div>
+          <div class="ftr"><span class="fi">│   │   ├── </span><span class="fn s">google.com.md</span></div>
+          <div class="ftr"><span class="fi">│   │   └── </span><span class="fn s">openrouter.ai.md</span></div>
+          <div class="ftr"><span class="fi">│   └── </span><span class="fn d">playbooks/</span><span class="fc">step-by-step task recipes</span></div>
+          <div class="ftr"><span class="fi">│       ├── </span><span class="fn p">linkedin-create-post.md</span></div>
+          <div class="ftr"><span class="fi">│       ├── </span><span class="fn p">instagram-create-post.md</span></div>
+          <div class="ftr"><span class="fi">│       └── </span><span class="fn p">gmb-create-post.md</span></div>
+          <div class="ftr"><span class="fi">└── </span><span class="fn d">learnings/</span><span class="fc">compiled after sessions</span></div>
+        </div>
+      </div>
+
+      <!-- ─ Commands ─ -->
+      <div class="skill-pane" id="sk-cmds">
+        <table class="cmd-tbl">
+          <thead>
+            <tr><th>Command</th><th>Does</th><th>Note</th></tr>
+          </thead>
+          <tbody>
+            <tr class="grp"><td colspan="3">Navigate</td></tr>
+            <tr><td>aslan nav &lt;url&gt; --wait idle</td><td>Navigate. Wait for network idle.</td><td>Use idle for SPAs, load for static</td></tr>
+            <tr><td>aslan back / forward / reload</td><td>History navigation</td><td></td></tr>
+            <tr class="grp"><td colspan="3">Read</td></tr>
+            <tr><td>aslan tree</td><td>Accessibility tree — one line per node</td><td>Use @eN refs to act on elements</td></tr>
+            <tr><td>aslan text [--chars 3000]</td><td>Page innerText</td><td></td></tr>
+            <tr><td>aslan title / aslan url</td><td>Page title / current URL</td><td></td></tr>
+            <tr><td>aslan eval "return ..."</td><td>Run JS, return result</td><td class="warn">Must include return</td></tr>
+            <tr class="grp"><td colspan="3">Interact</td></tr>
+            <tr><td>aslan click @eN</td><td>Click by ref or CSS selector</td><td>Prefer @eN refs</td></tr>
+            <tr><td>aslan fill @eN &lt;value&gt;</td><td>Fill input or textarea</td><td class="warn">Fails on contenteditable</td></tr>
+            <tr><td>aslan type @eN &lt;value&gt;</td><td>Type text</td><td>Works on contenteditable too</td></tr>
+            <tr><td>aslan key Enter [--meta]</td><td>Keypress with optional modifiers</td><td></td></tr>
+            <tr><td>aslan scroll --down 500</td><td>Scroll page</td><td>--to @eN scrolls element into view</td></tr>
+            <tr class="grp"><td colspan="3">Wait / Upload / Screenshot</td></tr>
+            <tr><td>aslan wait --idle</td><td>Wait for network idle + DOM stable</td><td>After click that triggers navigation</td></tr>
+            <tr><td>aslan upload &lt;file&gt;</td><td>Inject file via DataTransfer API</td><td>Click upload button first</td></tr>
+            <tr><td>aslan shot [path]</td><td>Screenshot to file</td><td>Default: /tmp/aslan-screenshot.jpg</td></tr>
+            <tr class="grp"><td colspan="3">Tabs</td></tr>
+            <tr><td>aslan tabs</td><td>List tabs (* = current)</td><td>State in /tmp/aslan-cli.json</td></tr>
+            <tr><td>aslan tab:new [url]</td><td>Open new tab, switch to it</td><td></td></tr>
+            <tr><td>aslan tab:use &lt;id&gt;</td><td>Switch active tab</td><td></td></tr>
+            <tr><td>aslan status</td><td>Connection info</td><td>Must print "Connected"</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ─ Don'ts ─ -->
+      <div class="skill-pane" id="sk-donts">
+        <div class="dont-wrap">
+
+          <div class="dont-row">
+            <div class="dont-bad">
+              <div class="dont-lbl">Don't</div>
+              <div class="dont-txt prose">Write Python SDK boilerplate</div>
+              <div class="dont-txt" style="margin-top:6px">AslanBrowser()<br>with browser: browser.navigate(...)</div>
+            </div>
+            <div class="dont-good">
+              <div class="dont-lbl">Do</div>
+              <div class="dont-txt prose">Use the CLI</div>
+              <div class="dont-txt" style="margin-top:6px">aslan nav https://example.com<br>aslan tree<br>aslan click @e2</div>
+            </div>
+          </div>
+
+          <div class="dont-row">
+            <div class="dont-bad">
+              <div class="dont-lbl">Don't</div>
+              <div class="dont-txt prose">Pre-plan multi-step scripts</div>
+              <div class="dont-txt" style="margin-top:6px">aslan nav ...; aslan click @e3; aslan fill @e5 "x"; aslan key Enter</div>
+            </div>
+            <div class="dont-good">
+              <div class="dont-lbl">Do</div>
+              <div class="dont-txt prose">Act one step, read, decide next</div>
+              <div class="dont-txt" style="margin-top:6px">aslan nav ...<br>aslan tree      # read what loaded<br>aslan click @e3 # act on what you see<br>aslan tree      # read the result</div>
+            </div>
+          </div>
+
+          <div class="dont-row">
+            <div class="dont-bad">
+              <div class="dont-lbl">Don't</div>
+              <div class="dont-txt">aslan eval "document.title"</div>
+            </div>
+            <div class="dont-good">
+              <div class="dont-lbl">Do</div>
+              <div class="dont-txt">aslan eval "return document.title"</div>
+            </div>
+          </div>
+
+          <div class="dont-row">
+            <div class="dont-bad">
+              <div class="dont-lbl">Don't</div>
+              <div class="dont-txt prose">Use fill on contenteditable (LinkedIn, Facebook, Notion)</div>
+              <div class="dont-txt" style="margin-top:6px">aslan fill @e5 "hello world"</div>
+            </div>
+            <div class="dont-good">
+              <div class="dont-lbl">Do</div>
+              <div class="dont-txt prose">Use type instead</div>
+              <div class="dont-txt" style="margin-top:6px">aslan type @e5 "hello world"</div>
+            </div>
+          </div>
+
+          <div class="dont-row">
+            <div class="dont-bad">
+              <div class="dont-lbl">Don't</div>
+              <div class="dont-txt">aslan nav http://example.com</div>
+              <div class="dont-txt prose" style="margin-top:4px">ATS blocks http:// at the OS level</div>
+            </div>
+            <div class="dont-good">
+              <div class="dont-lbl">Do</div>
+              <div class="dont-txt">aslan nav https://example.com</div>
+            </div>
+          </div>
+
+          <div class="dont-row">
+            <div class="dont-bad">
+              <div class="dont-lbl">Don't</div>
+              <div class="dont-txt prose">Reuse @eN refs from a previous tree call</div>
+              <div class="dont-txt" style="margin-top:6px">aslan tree<br># ... do stuff ...<br>aslan tree<br>aslan click @e2  # ← @e2 may now be a different element</div>
+            </div>
+            <div class="dont-good">
+              <div class="dont-lbl">Do</div>
+              <div class="dont-txt prose">Always read tree immediately before acting</div>
+              <div class="dont-txt" style="margin-top:6px">aslan tree<br>aslan click @e2  # act on refs from THIS tree</div>
+            </div>
+          </div>
+
+          <div class="dont-row">
+            <div class="dont-bad">
+              <div class="dont-lbl">Don't</div>
+              <div class="dont-txt prose">Skip knowledge compilation after a task</div>
+            </div>
+            <div class="dont-good">
+              <div class="dont-lbl">Do</div>
+              <div class="dont-txt prose">Ask: "Did I learn anything?" — route it to core.md, sites/, playbooks/, or user.md</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div><!-- /s-skill -->
+
+  </div><!-- /content -->
+</div><!-- /body -->
+
+<!-- ── Bottom bar ──────────────────────────────────────────── -->
+<div class="btm">
+  <div class="btm-lbl">Shareable Summary</div>
+  <div class="btm-row">
+    <div class="prompt-txt" id="prompt-out"></div>
+    <button class="copy-btn" onclick="doCopy()">Copy</button>
+  </div>
+</div>
+
+<script>
+/* ── State ──────────────────────────────────────────────────── */
+const S = {
+  section:    'overview',
+  archNode:   null,
+  a11yPage:   'login',
+  apiCat:     'navigation',
+  apiMethod:  null,
+};
+
+/* ── Architecture details ────────────────────────────────────── */
+const ARCH = {
+  sdk: {
+    t: 'Python SDK — aslan_browser',
+    b: 'Sync (<code class="ic">AslanBrowser</code>) and async (<code class="ic">AsyncAslanBrowser</code>) clients. Connects to <code class="ic">/tmp/aslan-browser.sock</code> over a Unix domain socket. Wraps the JSON-RPC protocol into ergonomic method calls. Zero external dependencies — only Python stdlib. Under 300 lines total. Any language can implement a client: just write NDJSON JSON-RPC 2.0 over the socket.',
+  },
+  socket: {
+    t: 'SocketServer — SwiftNIO',
+    b: 'Listens on a Unix domain socket at <code class="ic">/tmp/aslan-browser.sock</code>. Unix sockets are ~30% faster than TCP for local IPC — no network stack overhead. SwiftNIO handles the async I/O. Each client connection gets a persistent read loop: JSON lines in, JSON lines out. Notifications (page load events, navigation changes) can push out without a request.',
+  },
+  rpc: {
+    t: 'JSONRPCHandler',
+    b: 'Parses each incoming newline-delimited JSON line as a JSON-RPC 2.0 message. Validates <code class="ic">method</code>, <code class="ic">id</code>, and <code class="ic">params</code>. Builds the response envelope — <code class="ic">{"jsonrpc":"2.0","id":1,"result":{}}</code> on success, <code class="ic">{"error":{}}</code> on failure. Handles batch requests (an array of calls in one line for parallel execution).',
+  },
+  router: {
+    t: 'MethodRouter',
+    b: 'A switch on method name strings. Maps <code class="ic">"navigate"</code> → <code class="ic">tab.navigate()</code>, <code class="ic">"getAccessibilityTree"</code> → <code class="ic">tab.getA11yTree()</code>, <code class="ic">"screenshot"</code> → <code class="ic">tab.screenshot()</code>, and so on. Reads the optional <code class="ic">tabId</code> param to route to the right tab — defaults to <code class="ic">tab0</code> for single-tab usage.',
+  },
+  tabmgr: {
+    t: 'TabManager',
+    b: 'Owns all BrowserTab instances. Creates/destroys tabs, groups them into sessions, and manages the lifecycle. A session is a named group of tabs — useful when multiple agents run simultaneously. Destroying a session closes all its tabs. Most single-agent scripts just use the default <code class="ic">tab0</code> that\'s created on launch.',
+  },
+  tab: {
+    t: 'BrowserTab — the core unit',
+    b: 'Wraps a <code class="ic">WKWebView</code> inside a hidden <code class="ic">NSWindow</code>. The window must be in the window hierarchy — even hidden — so WKWebView renders normally and JS/WebSockets/CSS animations all work. Handles navigation (with configurable <code class="ic">wait_until</code> states), screenshots (via <code class="ic">WKSnapshotConfiguration</code>), and bridges to ScriptBridge for accessibility tree extraction and interaction.',
+  },
+  bridge: {
+    t: 'ScriptBridge — injected JS',
+    b: 'JavaScript injected into every page that walks the DOM and produces a flat list of interactive/semantic elements: links, buttons, inputs, selects, textareas, ARIA landmarks, headings. Assigns each a stable <code class="ic">@eN</code> ref via <code class="ic">data-agent-ref</code> attributes. Names resolved from <code class="ic">aria-label</code> → <code class="ic">aria-labelledby</code> → <code class="ic">&lt;label&gt;</code> → placeholder → title → visible text. Bounding rects included for spatial reasoning. Handles JS-level click/fill/keypress for reliable interaction.',
+  },
+  web: {
+    t: 'The Web',
+    b: 'WKWebView renders real web pages with full JavaScript support, WebSocket support, CSS animations, iframes, and modern web APIs. It uses the same engine as Safari. No content restrictions — anything a regular Safari user can visit, Aslan can too. The <code class="ic">--hidden</code> flag makes the NSWindow invisible to the user while keeping it in the rendering hierarchy.',
+  },
+};
+
+function archDetail(key) {
+  S.archNode = key;
+  const d = ARCH[key];
+  document.getElementById('arch-detail').innerHTML =
+    `<h3>${d.t}</h3><p>${d.b}</p>`;
+  updatePrompt();
+}
+
+/* ── A11y pages ────────────────────────────────────────────── */
+const PAGES = {
+  login: {
+    html: `<div class="fake-page">
+      <h2 data-ref="@e0">Sign in to GitHub</h2>
+      <span class="flabel">Username or email address</span>
+      <input data-ref="@e1" type="text" placeholder="Username or email address">
+      <span class="flabel">Password</span>
+      <input data-ref="@e2" type="password" placeholder="Password">
+      <div style="margin-top:12px">
+        <button data-ref="@e3">Sign in</button>
+      </div>
+      <div style="margin-top:10px">
+        <a data-ref="@e4" href="#">Forgot password?</a>
+        <a data-ref="@e5" href="#">Create an account</a>
+      </div>
+    </div>`,
+    tree: [
+      { ref:'@e0', role:'heading',  name:'Sign in to GitHub' },
+      { ref:'@e1', role:'textbox',  name:'Username or email address' },
+      { ref:'@e2', role:'textbox',  name:'Password' },
+      { ref:'@e3', role:'button',   name:'Sign in' },
+      { ref:'@e4', role:'link',     name:'Forgot password?' },
+      { ref:'@e5', role:'link',     name:'Create an account' },
+    ]
+  },
+  search: {
+    html: `<div class="fake-page">
+      <h2 data-ref="@e0">Search</h2>
+      <input data-ref="@e1" type="text" placeholder="Search docs, issues, code...">
+      <div style="margin-top:10px">
+        <button data-ref="@e2">Search</button>
+        <button data-ref="@e3" class="sec">Advanced</button>
+      </div>
+      <div style="margin-top:12px">
+        <a data-ref="@e4" href="#">Documentation</a>
+        <a data-ref="@e5" href="#">Blog</a>
+        <a data-ref="@e6" href="#">Community</a>
+        <a data-ref="@e7" href="#">Changelog</a>
+      </div>
+    </div>`,
+    tree: [
+      { ref:'@e0', role:'heading',   name:'Search' },
+      { ref:'@e1', role:'searchbox', name:'Search docs, issues, code...' },
+      { ref:'@e2', role:'button',    name:'Search' },
+      { ref:'@e3', role:'button',    name:'Advanced' },
+      { ref:'@e4', role:'link',      name:'Documentation' },
+      { ref:'@e5', role:'link',      name:'Blog' },
+      { ref:'@e6', role:'link',      name:'Community' },
+      { ref:'@e7', role:'link',      name:'Changelog' },
+    ]
+  },
+  article: {
+    html: `<div class="fake-page">
+      <h2 data-ref="@e0">Getting Started with Aslan Browser</h2>
+      <p data-ref="@e1" style="color:#555;font-size:11px;margin:4px 0 10px">By Irma Gerd · Feb 20, 2026 · 8 min read</p>
+      <p data-ref="@e2" style="color:#333;font-size:12px;margin-bottom:10px;line-height:1.5">A native macOS browser built for AI agents — WKWebView, Unix socket, accessibility tree...</p>
+      <div>
+        <button data-ref="@e3">Share</button>
+        <button data-ref="@e4" class="sec">Bookmark</button>
+      </div>
+      <div style="margin-top:10px">
+        <a data-ref="@e5" href="#">← Back to Blog</a>
+        <a data-ref="@e6" href="#">Next Article →</a>
+      </div>
+    </div>`,
+    tree: [
+      { ref:'@e0', role:'heading',   name:'Getting Started with Aslan Browser' },
+      { ref:'@e1', role:'paragraph', name:'By Irma Gerd · Feb 20, 2026 · 8 min read' },
+      { ref:'@e2', role:'paragraph', name:'A native macOS browser built for AI agents — WKWebView, Unix socket, accessibility tree...' },
+      { ref:'@e3', role:'button',    name:'Share' },
+      { ref:'@e4', role:'button',    name:'Bookmark' },
+      { ref:'@e5', role:'link',      name:'← Back to Blog' },
+      { ref:'@e6', role:'link',      name:'Next Article →' },
+    ]
+  },
+  settings: {
+    html: `<div class="fake-page">
+      <h2 data-ref="@e0">Account Settings</h2>
+      <span class="flabel">Display name</span>
+      <input data-ref="@e1" type="text" placeholder="Display name" value="Irma Gerd">
+      <span class="flabel">Email</span>
+      <input data-ref="@e2" type="email" placeholder="Email address">
+      <span class="flabel">Time zone</span>
+      <select data-ref="@e3" style="width:100%;padding:5px 8px;border:1px solid #d0d7de;border-radius:5px;font-size:12px;margin:3px 0">
+        <option>America/Los_Angeles</option>
+      </select>
+      <div style="margin-top:12px">
+        <button data-ref="@e4">Save changes</button>
+        <button data-ref="@e5" class="sec">Cancel</button>
+      </div>
+    </div>`,
+    tree: [
+      { ref:'@e0', role:'heading',  name:'Account Settings' },
+      { ref:'@e1', role:'textbox',  name:'Display name' },
+      { ref:'@e2', role:'textbox',  name:'Email address' },
+      { ref:'@e3', role:'combobox', name:'Time zone' },
+      { ref:'@e4', role:'button',   name:'Save changes' },
+      { ref:'@e5', role:'button',   name:'Cancel' },
+    ]
+  }
+};
+
+function a11yPage(key, btn) {
+  S.a11yPage = key;
+  document.querySelectorAll('.ptab').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  renderA11y();
+  updatePrompt();
+}
+
+function renderA11y() {
+  const p = PAGES[S.a11yPage];
+  document.getElementById('fake-page').innerHTML = p.html;
+  document.getElementById('tree-out').innerHTML = p.tree.map((n,i) =>
+    `<div class="tnode" data-i="${i}" onmouseenter="hlNode(${i})" onmouseleave="clearHl()">
+      <span class="tref">${n.ref}</span><span class="trole">${n.role}</span><span class="tname">"${n.name}"</span>
+    </div>`
+  ).join('');
+}
+
+function hlNode(i) {
+  const ref = PAGES[S.a11yPage].tree[i].ref;
+  document.querySelectorAll('.tnode').forEach((el,j) => el.classList.toggle('hl', i===j));
+  document.querySelectorAll('#fake-page [data-ref]').forEach(el => {
+    const hit = el.dataset.ref === ref;
+    el.style.outline      = hit ? '2px solid #58a6ff' : '';
+    el.style.outlineOffset = hit ? '3px' : '';
+    el.style.borderRadius  = hit ? '3px' : '';
+  });
+}
+function clearHl() {
+  document.querySelectorAll('.tnode').forEach(el => el.classList.remove('hl'));
+  document.querySelectorAll('#fake-page [data-ref]').forEach(el => {
+    el.style.outline = el.style.outlineOffset = el.style.borderRadius = '';
+  });
+}
+
+/* ── API data ────────────────────────────────────────────────── */
+const API = {
+  navigation: {
+    lbl: 'Navigation',
+    methods: [
+      { n:'navigate',          a:'url, wait_until="idle"',    d:'Navigate to a URL. wait_until: "none" (fire-and-forget), "load" (DOMContentLoaded), "idle" (network quiet). Use "idle" for SPAs.', ex:'browser.navigate("https://github.com/login", wait_until="idle")' },
+      { n:'go_back',           a:'',                          d:'Navigate to the previous URL in tab history.',                                                                                      ex:'browser.go_back()' },
+      { n:'go_forward',        a:'',                          d:'Navigate forward in tab history.',                                                                                                 ex:'browser.go_forward()' },
+      { n:'reload',            a:'',                          d:'Reload the current page.',                                                                                                         ex:'browser.reload()' },
+      { n:'wait_for_selector', a:'selector, timeout=5000',    d:'Wait for a CSS selector to appear in the DOM. Useful after clicks that trigger dynamic content.',                                  ex:'browser.wait_for_selector(".results-list", timeout=3000)' },
+    ]
+  },
+  page: {
+    lbl: 'Page Info',
+    methods: [
+      { n:'get_title',  a:'',              d:'Return the current page title as a string.',                                                                        ex:'title = browser.get_title()  # "GitHub · Login"' },
+      { n:'get_url',    a:'',              d:'Return the current URL.',                                                                                           ex:'url = browser.get_url()  # "https://github.com/login"' },
+      { n:'evaluate',   a:'script, args={}', d:'Execute JavaScript and return the result. Pass args as a dict — they become local variables in the script. Return value must be JSON-serializable.', ex:'count = browser.evaluate("return document.querySelectorAll(\'a\').length")\n\nresult = browser.evaluate(\n    "return document.querySelector(sel).textContent",\n    args={"sel": "h1"}\n)' },
+    ]
+  },
+  tree: {
+    lbl: 'A11y Tree',
+    methods: [
+      { n:'get_accessibility_tree', a:'', d:'Extract the accessibility tree as a flat list of dicts. Each node: {"ref": "@e0", "role": "link", "name": "Sign in", "rect": {"x":10,"y":50,"w":80,"h":24}}. Only interactive and semantic elements are included. This is what you send to the LLM.', ex:'tree = browser.get_accessibility_tree()\nfor node in tree:\n    print(node["ref"], node["role"], node["name"])\n# @e0  link    "Sign in"\n# @e1  textbox "Username"\n# @e2  button  "Submit"' },
+    ]
+  },
+  interact: {
+    lbl: 'Interaction',
+    methods: [
+      { n:'click',    a:'target',             d:'Click an element by @eN ref or CSS selector. Prefer @eN refs — they\'re stable across re-renders.',                           ex:'browser.click("@e2")         # @eN ref (preferred)\nbrowser.click(".submit-btn")     # CSS selector fallback' },
+      { n:'fill',     a:'target, value',       d:'Fill an input field with a value. Clears existing content first. Works with textbox, textarea, searchbox.',                   ex:'browser.fill("@e0", "myusername")\nbrowser.fill("@e1", "hunter2")' },
+      { n:'select',   a:'target, value',       d:'Select an option from a <select> dropdown. value is the option\'s value attribute, not its display text.',                    ex:'browser.select("@e3", "us-west-2")' },
+      { n:'keypress', a:'key, modifiers={}',   d:'Send a keypress. Common keys: "Enter", "Tab", "Escape", "ArrowDown", "ArrowUp". Modifiers: meta, ctrl, shift, alt.',         ex:'browser.keypress("Enter")\nbrowser.keypress("a", modifiers={"meta": True})  # Cmd+A' },
+      { n:'scroll',   a:'x, y, target=None',  d:'Scroll by (x, y) pixels. Without target, scrolls the page. With target (@eN or selector), scrolls that element.',            ex:'browser.scroll(0, 500)          # page down 500px\nbrowser.scroll(0, 200, "@e5")   # scroll inside element' },
+    ]
+  },
+  screenshots: {
+    lbl: 'Screenshots',
+    methods: [
+      { n:'screenshot',      a:'quality=70, width=1440',  d:'Take a screenshot and return JPEG bytes. ~15ms. Send directly to GPT-4V, Claude, Gemini, etc. Default quality 70 balances size and fidelity.',  ex:'jpeg_bytes = browser.screenshot(quality=70)\n# pass bytes directly to your vision model' },
+      { n:'save_screenshot', a:'path, quality=85, width=1440', d:'Take a screenshot and save to a file path. Returns file size in bytes.',                                                                    ex:'size = browser.save_screenshot("page.jpg", quality=85)\nprint(f"Saved {size:,} bytes")' },
+    ]
+  },
+  tabs: {
+    lbl: 'Tabs & Sessions',
+    methods: [
+      { n:'tab_create',       a:'url=None, hidden=True',  d:'Create a new browser tab. Returns tab_id string. Optionally navigate immediately by passing url.', ex:'tab1 = browser.tab_create(url="https://google.com")\ntab2 = browser.tab_create()  # blank tab' },
+      { n:'tab_close',        a:'tab_id',                 d:'Close a tab and release its resources.',                                                            ex:'browser.tab_close(tab1)' },
+      { n:'tab_list',         a:'session_id=None',        d:'List all open tabs as a list of dicts. Optionally filter by session.',                               ex:'tabs = browser.tab_list()\n# [{"tabId":"tab0"}, {"tabId":"tab1"}]' },
+      { n:'session_create',   a:'name',                   d:'Create a named session for grouping tabs. Useful when running multiple agents in parallel.',         ex:'sess = browser.session_create("agent-research")' },
+      { n:'session_destroy',  a:'session_id',             d:'Destroy a session and close all tabs belonging to it.',                                              ex:'browser.session_destroy(sess)' },
+    ]
+  },
+  batch: {
+    lbl: 'Parallel / Batch',
+    methods: [
+      { n:'parallel_navigate',     a:'urls: dict',          d:'Navigate multiple tabs simultaneously in one round-trip. Pass {tab_id: url} dict. All navigations happen concurrently.', ex:'browser.parallel_navigate({\n    tab1: "https://news.ycombinator.com",\n    tab2: "https://reddit.com/r/python",\n})' },
+      { n:'parallel_get_trees',    a:'tab_ids: list',       d:'Get accessibility trees from multiple tabs in a single round-trip. Returns {tab_id: tree} dict.',                         ex:'trees = browser.parallel_get_trees([tab1, tab2])\ntree1 = trees[tab1]' },
+      { n:'parallel_screenshots',  a:'tab_ids: list',       d:'Screenshot multiple tabs in one round-trip. Returns {tab_id: jpeg_bytes} dict.',                                          ex:'shots = browser.parallel_screenshots([tab1, tab2])' },
+      { n:'batch',                 a:'requests: list',      d:'Low-level: execute multiple arbitrary JSON-RPC calls in a single line sent over the socket. Returns list of results.',    ex:'results = browser.batch([\n    {"method": "getTitle", "params": {"tabId": "tab0"}},\n    {"method": "getUrl",   "params": {"tabId": "tab0"}},\n])' },
+    ]
+  },
+  cookies: {
+    lbl: 'Cookies',
+    methods: [
+      { n:'get_cookies', a:'url=None',                                 d:'Get cookies, optionally filtered to a specific URL. Returns list of cookie dicts.',                                                                          ex:'cookies = browser.get_cookies(url="https://example.com")' },
+      { n:'set_cookie',  a:'name, value, domain, path="/", expires=None', d:'Set a cookie. Useful for pre-authenticating before navigating to a page.',                                                                              ex:'browser.set_cookie(\n    name="session",\n    value="abc123",\n    domain=".example.com",\n)\nbrowser.navigate("https://example.com/dashboard")' },
+    ]
+  },
+};
+
+let selMethod = null;
+
+function renderApiCats() {
+  document.getElementById('api-cats').innerHTML =
+    Object.entries(API).map(([k,v]) =>
+      `<div class="api-cat ${k===S.apiCat?'on':''}" onclick="selApiCat('${k}')">${v.lbl}</div>`
+    ).join('');
+}
+
+function renderApiMethods() {
+  const cat = API[S.apiCat];
+  document.getElementById('api-methods').innerHTML =
+    cat.methods.map((m,i) =>
+      `<div class="api-m" onclick="selApiM(${i})">
+        <div class="api-m-sig"><span class="mn">browser.${m.n}</span><span class="ma">(${m.a})</span></div>
+        <div class="api-m-desc">${m.d.split('.')[0]}.</div>
+      </div>`
+    ).join('');
+  document.getElementById('api-detail').style.display = 'none';
+  selMethod = null;
+}
+
+function selApiCat(k) {
+  S.apiCat = k;
+  renderApiCats();
+  renderApiMethods();
+  updatePrompt();
+}
+
+function selApiM(i) {
+  const m = API[S.apiCat].methods[i];
+  selMethod = m;
+  const el = document.getElementById('api-detail');
+  el.style.display = 'block';
+  el.innerHTML = `<h3>browser.${m.n}(${m.a})</h3><div class="desc">${m.d}</div><pre>${m.ex}</pre>`;
+  updatePrompt();
+}
+
+/* ── Section navigation ──────────────────────────────────────── */
+function nav(name) {
+  S.section = name;
+  document.querySelectorAll('.sect').forEach(el => el.classList.remove('on'));
+  document.getElementById('s-'+name).classList.add('on');
+  document.querySelectorAll('.nav-item').forEach(el =>
+    el.classList.toggle('on', el.dataset.s === name)
+  );
+  if (name === 'a11y') renderA11y();
+  if (name === 'api')  { renderApiCats(); renderApiMethods(); }
+  if (name === 'skill') { /* no init needed */ }
+  updatePrompt();
+}
+
+/* ── Presets ─────────────────────────────────────────────────── */
+function preset(name, btn) {
+  document.querySelectorAll('.pset-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  if (name === 'a11y') { nav('a11y'); a11yPage('login', document.querySelector('.ptab')); }
+  else if (name === 'api') { nav('api'); selApiCat('tree'); }
+  else nav(name);
+}
+
+/* ── Prompt output ───────────────────────────────────────────── */
+function updatePrompt() {
+  const el = document.getElementById('prompt-out');
+  let txt = '';
+  if (S.section === 'overview') {
+    txt = 'Aslan Browser is a native macOS browser for AI agents. It wraps WKWebView and exposes it via a Unix socket with NDJSON JSON-RPC 2.0. Instead of the full DOM, it returns a compact accessibility tree — 10–100× fewer tokens for the same page. The Python SDK has zero external dependencies (stdlib only). JS eval ~0.5ms, screenshots ~15ms, ~40MB/tab. ~2,600 lines total (Swift + Python).';
+  } else if (S.section === 'why') {
+    txt = 'Safari automation was built for testing websites, not operating them. Four problems: (1) Glass pane — Safari blocks all user clicks during automation, Aslan lets you co-browse. (2) Forced private mode — Safari wipes cookies every session, Aslan keeps a persistent profile. (3) HTTP vs Unix socket — WebDriver adds 10–50ms per command, Aslan is ~0.5ms. (4) Raw HTML vs accessibility tree — Safari dumps the DOM, Aslan gives the LLM a clean structured list at 10–100x fewer tokens.';
+  } else if (S.section === 'architecture') {
+    if (S.archNode) {
+      const d = ARCH[S.archNode];
+      txt = `Aslan Browser — ${d.t}: ${d.b.replace(/<[^>]+>/g,'')}`;
+    } else {
+      txt = 'Aslan Browser architecture: Python SDK ↔ Unix socket ↔ SocketServer (SwiftNIO) → JSONRPCHandler → MethodRouter → TabManager → BrowserTab (WKWebView). ScriptBridge is injected JS that produces the @eN-tagged accessibility tree and handles interactions. Click any component to learn more.';
+    }
+  } else if (S.section === 'a11y') {
+    const p = PAGES[S.a11yPage];
+    txt = `Accessibility tree demo — "${S.a11yPage}" page: ${p.tree.length} nodes extracted. ` +
+      p.tree.map(n => `${n.ref} ${n.role} "${n.name}"`).join(' · ') +
+      '. The agent uses @eN refs with click() and fill() instead of working with raw DOM. Nodes include role, name (resolved from aria-label → label → placeholder → text), and bounding rect.';
+  } else if (S.section === 'api') {
+    if (selMethod) {
+      txt = `Aslan Browser SDK — browser.${selMethod.n}(${selMethod.a}): ${selMethod.d}`;
+    } else {
+      const cat = API[S.apiCat];
+      txt = `Aslan Browser SDK — ${cat.lbl.replace(/^.+ /,'')} methods: ${cat.methods.map(m=>`browser.${m.n}()`).join(', ')}.`;
+    }
+  } else if (S.section === 'compare') {
+    txt = 'Aslan vs Playwright/Puppeteer/Selenium: Aslan uses WKWebView (no 500MB Chrome download), returns an accessibility tree instead of raw DOM (10–100× fewer tokens), JS eval ~0.5ms vs 2–5ms, screenshots ~15ms vs 50–150ms, ~40MB/tab vs 80–150MB, cold start <500ms vs 2–5s. Python SDK is zero-dependency (stdlib only). Trade-off: macOS 14+ only. Built specifically for the AI agent use case with a built-in Prompts-are-Code skill.';
+  } else if (S.section === 'skill') {
+    if (skillTabKey === 'flow')  txt = 'Aslan Browser skill — session lifecycle: Setup (load SDK_REFERENCE.md + core.md + user.md + site file if relevant, verify aslan status) → OARC loop (Orient: aslan tabs/url/title · Act: ONE command · Read: aslan tree · Decide: loop or compile) → Compile (route discoveries to core.md / sites/{domain}.md / playbooks/ / user.md).';
+    if (skillTabKey === 'files') txt = 'Skill file map: SKILL.md (protocol, loaded every invocation) · SDK_REFERENCE.md (CLI reference, loaded every session) · knowledge/core.md (universal rules, always loaded) · knowledge/user.md (user prefs, gitignored) · knowledge/sites/{domain}.md (8 site guides, loaded on demand) · knowledge/playbooks/ (3 task playbooks) · learnings/.';
+    if (skillTabKey === 'cmds')  txt = 'Key aslan CLI commands: nav <url> --wait idle · tree (accessibility tree, @eN refs) · text / title / url · eval "return ..." (return required) · click @eN · fill @eN <val> (inputs only) · type @eN <val> (works on contenteditable) · key Enter · scroll · wait --idle · upload <file> · shot [path] · tab:new / tab:use / tabs · status.';
+    if (skillTabKey === 'donts') txt = "Aslan skill explicit rules: use aslan CLI not Python SDK · act one step then read — never pre-plan multi-step scripts · aslan eval needs return · use aslan type not fill on contenteditable · always https:// never http:// · @eN refs are ephemeral — read tree immediately before acting · compile knowledge after every task.";
+  } else if (S.section === 'quickstart') {
+    txt = 'Aslan Browser quickstart (5 steps): 1) Build with Xcode or download pre-built binary from GitHub Releases. 2) pip install -e sdk/python (zero external deps). 3) Start the app with --hidden flag — listens on /tmp/aslan-browser.sock. 4) Use AslanBrowser() context manager: navigate() → get_accessibility_tree() → click/@eN refs → screenshot(). 5) Optionally symlink the bundled AI skill into your agent\'s skill directory.';
+  }
+  el.textContent = txt;
+}
+
+function doCopy() {
+  const txt = document.getElementById('prompt-out').textContent;
+  navigator.clipboard.writeText(txt).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = 'Copied!';
+    btn.style.color = 'var(--green)';
+    setTimeout(() => { btn.textContent = 'Copy'; btn.style.color = ''; }, 1500);
+  });
+}
+
+/* ── Zoom ────────────────────────────────────────────────────── */
+const ZOOM_STEPS = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250];
+let zoomIdx = 5; // 100%
+
+function applyZoom() {
+  const pct = ZOOM_STEPS[zoomIdx];
+  document.getElementById('app').style.zoom = pct / 100;
+  document.getElementById('zoom-lbl').textContent = pct + '%';
+}
+
+function zoom(dir) {
+  zoomIdx = Math.max(0, Math.min(ZOOM_STEPS.length - 1, zoomIdx + dir));
+  applyZoom();
+}
+
+function zoomReset() {
+  zoomIdx = 5;
+  applyZoom();
+}
+
+document.addEventListener('keydown', e => {
+  const mac  = e.metaKey;
+  const ctrl = e.ctrlKey;
+  if (!mac && !ctrl) return;
+  if (e.key === '=' || e.key === '+') { e.preventDefault(); zoom(+1); }
+  if (e.key === '-' || e.key === '_') { e.preventDefault(); zoom(-1); }
+  if (e.key === '0')                  { e.preventDefault(); zoomReset(); }
+});
+
+/* ── Init ─────────────────────────────────────────────────────── */
+
+
+/* ── Skill tabs ─────────────────────────────────────────────── */
+let skillTabKey = 'flow';
+
+function skillTab(key, btn) {
+  skillTabKey = key;
+  document.querySelectorAll('.skill-tab').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  document.querySelectorAll('.skill-pane').forEach(p => p.classList.remove('on'));
+  document.getElementById('sk-' + key).classList.add('on');
+  updatePrompt();
+}
+
+
+renderA11y();
+renderApiCats();
+renderApiMethods();
+updatePrompt();
+</script>
+</div><!-- /#app -->
+</body>
+</html>
