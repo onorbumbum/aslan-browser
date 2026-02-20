@@ -22,15 +22,11 @@
 
 ### 2. Insert text
 
-- Build HTML from text lines:
-  - Each line → `<p>{line}</p>`
-  - Empty lines → `<p><br></p>`
-- Set via evaluate:
-  ```js
-  document.querySelector('.ql-editor').innerHTML = htmlContent
-  ```
-- Verify: read back `.ql-editor.innerText` to confirm content was set and is non-empty
-- Fallback: if innerHTML doesn't render, try `execCommand("insertText")` for simple text
+- **Simple text:** `aslan type ".ql-editor" "Your post text here"`
+- **Multi-line / rich text with links:** Build HTML and set via eval:
+  - Each line → `<p>{line}</p>`, empty lines → `<p><br></p>`
+  - `aslan eval 'var e = document.querySelector(".ql-editor"); e.innerHTML = htmlContent; return e.innerText.substring(0,100)'`
+- Verify: read back content to confirm it was set and is non-empty
 
 ### 3. Attach images (if provided)
 

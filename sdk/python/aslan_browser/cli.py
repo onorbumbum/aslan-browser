@@ -182,6 +182,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--tab", help="Target tab ID")
     p.set_defaults(func=cmd_text)
 
+    p = sub.add_parser("html", help="Print page HTML")
+    p.add_argument("--chars", type=int, default=20000, help="Max characters (default: 20000)")
+    p.add_argument("--selector", help="Get innerHTML of a specific element instead of body")
+    p.add_argument("--tab", help="Target tab ID")
+    p.set_defaults(func=cmd_html)
+
     p = sub.add_parser("eval", help="Evaluate JavaScript")
     p.add_argument("script", help='JavaScript to evaluate (must use "return")')
     p.add_argument("--tab", help="Target tab ID")
@@ -199,6 +205,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("value", help="Value to fill")
     p.add_argument("--tab", help="Target tab ID")
     p.set_defaults(func=cmd_fill)
+
+    p = sub.add_parser("type", help="Type text into any field (works on contenteditable)")
+    p.add_argument("target", help="@eN ref or CSS selector")
+    p.add_argument("value", help="Text to type")
+    p.add_argument("--tab", help="Target tab ID")
+    p.set_defaults(func=cmd_type)
 
     p = sub.add_parser("select", help="Select a dropdown option")
     p.add_argument("target", help="@eN ref or CSS selector")
@@ -221,6 +233,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--to", metavar="REF", help="Scroll element into view (@eN or CSS)")
     p.add_argument("--tab", help="Target tab ID")
     p.set_defaults(func=cmd_scroll)
+
+    # ── wait ──────────────────────────────────────────────────────
+    p = sub.add_parser("wait", help="Wait for page to reach a readiness state")
+    p.add_argument("--idle", action="store_true", help="Wait for network idle + DOM stable")
+    p.add_argument("--load", action="store_true", help="Wait for page load")
+    p.add_argument("--timeout", type=int, default=10000, help="Timeout in ms (default: 10000)")
+    p.add_argument("--tab", help="Target tab ID")
+    p.set_defaults(func=cmd_wait)
 
     # ── file upload ────────────────────────────────────────────────
     p = sub.add_parser("upload", help="Upload a file to an input[type=file]")
@@ -413,6 +433,23 @@ def cmd_text(args: argparse.Namespace) -> None:
         b.close()
 
 
+def cmd_html(args: argparse.Namespace) -> None:
+    tab = _current_tab(args)
+    b = _connect()
+    try:
+        if args.selector:
+            js = f'var el = document.querySelector(sel); return el ? el.innerHTML.substring(0, {args.chars}) : "error: not found"'
+            html = b.evaluate(js, tab_id=tab, args={"sel": args.selector})
+        else:
+            html = b.evaluate(
+                f"return document.body.innerHTML.substring(0, {args.chars})",
+                tab_id=tab,
+            )
+        print(html or "")
+    finally:
+        b.close()
+
+
 def cmd_eval(args: argparse.Namespace) -> None:
     tab = _current_tab(args)
     b = _connect()
@@ -445,6 +482,39 @@ def cmd_fill(args: argparse.Namespace) -> None:
     try:
         b.fill(args.target, args.value, tab_id=tab)
         print("ok")
+    finally:
+        b.close()
+
+
+def cmd_type(args: argparse.Namespace) -> None:
+    tab = _current_tab(args)
+    b = _connect()
+    try:
+        # Resolve @eN refs to CSS selector
+        target = args.target
+        if target.startswith("@e"):
+            target = f'[data-agent-ref="{target}"]'
+
+        js = """
+        var el = document.querySelector(sel);
+        if (!el) return "error: element not found";
+        el.focus();
+        if (el.isContentEditable || el.getAttribute("contenteditable") === "true") {
+            document.execCommand("insertText", false, text);
+            return "typed (contenteditable)";
+        } else if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+            el.value = text;
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+            return "typed (input)";
+        } else {
+            el.focus();
+            document.execCommand("insertText", false, text);
+            return "typed (execCommand fallback)";
+        }
+        """
+        result = b.evaluate(js, tab_id=tab, args={"sel": target, "text": args.value})
+        print(result or "ok")
     finally:
         b.close()
 
@@ -491,6 +561,67 @@ def cmd_scroll(args: argparse.Namespace) -> None:
         else:
             b.scroll(y=500, tab_id=tab)  # default: scroll down 500px
         print("ok")
+    finally:
+        b.close()
+
+
+# ── wait ──────────────────────────────────────────────────────────
+
+def cmd_wait(args: argparse.Namespace) -> None:
+    tab = _current_tab(args)
+    b = _connect()
+    try:
+        if args.idle:
+            # Navigate to the current URL with wait_until=idle to trigger idle wait
+            # This uses the browser's built-in readiness detection
+            url = b.get_url(tab_id=tab)
+            js = """
+            return await new Promise(function(resolve) {
+                if (window.__agent && window.__agent._networkIdle && window.__agent._domStable) {
+                    resolve("ready");
+                    return;
+                }
+                var start = Date.now();
+                var check = setInterval(function() {
+                    var idle = !window.__agent || (window.__agent._networkIdle !== false);
+                    var stable = !window.__agent || (window.__agent._domStable !== false);
+                    if (idle && stable) {
+                        clearInterval(check);
+                        resolve("ready");
+                    } else if (Date.now() - start > timeout) {
+                        clearInterval(check);
+                        resolve("timeout");
+                    }
+                }, 100);
+            });
+            """
+            result = b.evaluate(js, tab_id=tab, args={"timeout": args.timeout})
+            print(result or "ready")
+        elif args.load:
+            js = """
+            return await new Promise(function(resolve) {
+                if (document.readyState === "complete") {
+                    resolve("ready");
+                    return;
+                }
+                var start = Date.now();
+                var check = setInterval(function() {
+                    if (document.readyState === "complete") {
+                        clearInterval(check);
+                        resolve("ready");
+                    } else if (Date.now() - start > timeout) {
+                        clearInterval(check);
+                        resolve("timeout");
+                    }
+                }, 100);
+            });
+            """
+            result = b.evaluate(js, tab_id=tab, args={"timeout": args.timeout})
+            print(result or "ready")
+        else:
+            # Default: wait for idle
+            print("Usage: aslan wait --idle or aslan wait --load", file=sys.stderr)
+            sys.exit(1)
     finally:
         b.close()
 

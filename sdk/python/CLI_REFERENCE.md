@@ -58,6 +58,17 @@ aslan eval <script>         # Evaluate JS — MUST include "return"
 
 Use `@eN` refs from tree output in `click`, `fill`, `scroll --to`.
 
+**HTML — get page source:**
+```bash
+aslan html [--chars <n>] [--selector <css>]
+# Default: body innerHTML, 20000 chars. --selector targets a specific element.
+```
+
+```
+$ aslan html --selector "h1"
+Example Domain
+```
+
 **Eval example:**
 ```
 $ aslan eval "return document.querySelectorAll('a').length"
@@ -70,7 +81,8 @@ $ aslan eval "return document.querySelectorAll('a').length"
 
 ```bash
 aslan click <ref-or-selector>              # Click @e3 or "button.submit"
-aslan fill <ref-or-selector> <value>       # Fill input field
+aslan fill <ref-or-selector> <value>       # Fill input field (input/textarea only)
+aslan type <ref-or-selector> <value>       # Type text — works on contenteditable too
 aslan select <ref-or-selector> <value>     # Select dropdown option
 aslan key <key> [--meta] [--ctrl] [--shift] [--alt]   # Keypress
 aslan scroll [--down <px>] [--up <px>] [--to <ref>]   # Scroll (default: --down 500)
@@ -81,7 +93,8 @@ aslan scroll [--down <px>] [--up <px>] [--to <ref>]   # Scroll (default: --down 
 **Examples:**
 ```bash
 aslan click @e2
-aslan fill @e5 "hello world"
+aslan fill @e5 "hello world"        # for <input> / <textarea>
+aslan type @e5 "hello world"        # for contenteditable (LinkedIn, Facebook, Notion)
 aslan key Enter
 aslan key a --meta          # Cmd+A (select all)
 aslan scroll --down 500
@@ -89,6 +102,24 @@ aslan scroll --to @e10      # Scroll element into view
 ```
 
 All interaction commands print `ok` on success.
+
+---
+
+## Wait
+
+```bash
+aslan wait --idle [--timeout <ms>]   # Wait for network idle + DOM stable
+aslan wait --load [--timeout <ms>]   # Wait for document.readyState === "complete"
+```
+
+Use after `aslan click` on a link that triggers navigation. Default timeout: 10000ms.
+
+**Example:**
+```bash
+aslan click @e2            # click a link that navigates
+aslan wait --idle          # wait for new page to settle
+aslan tree                 # now read the new page
+```
 
 ---
 
@@ -174,7 +205,7 @@ aslan source    # Print SDK source path
 
 1. **`aslan eval` requires `return`.** `aslan eval "document.title"` → nothing. Use `aslan eval "return document.title"`.
 2. **ATS blocks `http://`.** Always use `https://`. No workaround.
-3. **`fill` doesn't work on contenteditable.** Use: `aslan eval 'return (function(){ var el = document.querySelector("[contenteditable]"); el.focus(); document.execCommand("insertText", false, "text"); return "done"; })()'`
+3. **`fill` doesn't work on contenteditable.** Use `aslan type` instead — it auto-detects and handles both input fields and contenteditable divs.
 4. **Quote shell arguments with spaces.** `aslan fill @e0 "hello world"` — quotes around the value.
 5. **Use single quotes for JS with double quotes.** `aslan eval 'return document.querySelector("h1").textContent'`
 6. **Refs are ephemeral.** Each `aslan tree` reassigns `@eN` refs. Don't reuse refs from a previous tree call.

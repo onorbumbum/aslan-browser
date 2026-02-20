@@ -26,12 +26,13 @@ Operational rules for driving Aslan via the `aslan` CLI. Loaded every session.
 ## Interaction Patterns
 
 - **contenteditable fields** (LinkedIn, Facebook, Notion): `aslan fill` sets `.value` which has no effect.
-  Use: `aslan eval 'return (function(){ var el = document.querySelector("[contenteditable]"); el.focus(); document.execCommand("insertText", false, "text"); return "done"; })()'`
+  Use `aslan type` instead — it auto-detects contenteditable and uses `execCommand("insertText")`.
+  For multi-line rich text, `aslan eval` with innerHTML is still better (e.g. LinkedIn's Quill editor with `<p>` tags).
 - **File uploads**: Native picker can't be automated. Use `aslan upload <file>` — it handles base64 encoding and DataTransfer injection automatically.
   Click the media/upload button first so the `input[type=file]` is in the DOM, then: `aslan upload /path/to/photo.jpg`
   Use `--selector` if there are multiple file inputs.
 - **React inputs**: Many React apps ignore `.value` changes.
-  Use `aslan eval` with `execCommand("insertText")` or dispatch `input`/`change` events manually.
+  Use `aslan type` — it dispatches proper `input` and `change` events after setting `.value`.
 
 ## Operational Rules
 
@@ -39,3 +40,5 @@ Operational rules for driving Aslan via the `aslan` CLI. Loaded every session.
 - To keep tabs open for user review: use `tab0` (survives cleanup) or don't close
 - Multi-line JS in `aslan eval`: use single quotes around the whole script, keep it as compact as possible
 - Tab not found: CLI auto-resets to tab0 and retries once
+- After clicking a link that navigates: use `aslan wait --idle` before reading the new page
+- `aslan wait --load` is faster but less thorough than `--idle` (no network/DOM stability check)

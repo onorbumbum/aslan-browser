@@ -152,3 +152,38 @@ def test_reload():
     run_aslan("nav", "https://example.com", "--wait", "load")
     r = run_aslan("reload")
     assert r.returncode == 0
+
+
+def test_html():
+    run_aslan("nav", "https://example.com", "--wait", "load")
+    r = run_aslan("html", "--chars", "500")
+    assert "<h1>" in r.stdout or "Example Domain" in r.stdout
+
+
+def test_html_selector():
+    run_aslan("nav", "https://example.com", "--wait", "load")
+    r = run_aslan("html", "--selector", "h1")
+    assert "Example Domain" in r.stdout
+
+
+def test_type():
+    # Type into a page with an input — use eval to create one
+    run_aslan("nav", "https://example.com", "--wait", "load")
+    run_aslan("eval", "var i = document.createElement('input'); i.id='test-input'; document.body.appendChild(i); return 'ok'")
+    r = run_aslan("type", "#test-input", "hello world")
+    assert "typed" in r.stdout
+    # Verify value was set
+    r = run_aslan("eval", 'return document.querySelector("#test-input").value')
+    assert "hello world" in r.stdout
+
+
+def test_wait_load():
+    run_aslan("nav", "https://example.com", "--wait", "load")
+    r = run_aslan("wait", "--load", "--timeout", "5000")
+    assert "ready" in r.stdout
+
+
+def test_wait_idle():
+    run_aslan("nav", "https://example.com", "--wait", "load")
+    r = run_aslan("wait", "--idle", "--timeout", "5000")
+    assert "ready" in r.stdout

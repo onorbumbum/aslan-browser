@@ -567,7 +567,7 @@ Total socket calls for opening + reading 6 dentist pages: **5 calls** (create se
 - Added `aslan` CLI tool (sdk/python/aslan_browser/cli.py, ~630 lines)
 - Entry point via pyproject.toml [project.scripts]
 - State file at /tmp/aslan-cli.json tracks current tab
-- 25 commands: status, source, nav, back, forward, reload, tree, title, url, text, eval, click, fill, select, key, scroll, upload, shot, tabs, tab:new, tab:close, tab:use, tab:wait, cookies, set-cookie
+- 28 commands: status, source, nav, back, forward, reload, tree, title, url, text, html, eval, click, fill, type, select, key, scroll, wait, upload, shot, tabs, tab:new, tab:close, tab:use, tab:wait, cookies, set-cookie
 - CLI_REFERENCE.md — agent-facing cheat sheet (~190 lines)
 - Rewrote SKILL.md to teach CLI instead of Python SDK (~108 lines, down from ~300+)
 - Updated knowledge/core.md for CLI-specific gotchas
@@ -583,3 +583,6 @@ Total socket calls for opening + reading 6 dentist pages: **5 calls** (create se
 3. **Compact output by default** — tree prints one line per node, nav prints title+URL. `--json` flag for programmatic access.
 4. **Zero new dependencies** — pure Python, wraps existing AslanBrowser SDK client.
 5. **`aslan upload` added after initial implementation** — file upload via DataTransfer API was the one operation that still required Python SDK boilerplate (base64 string too large for shell arg). Now fully CLI: `aslan upload /path/to/file.jpg`. Generic — works on any site with `input[type=file]`.
+6. **`aslan type` — universal text input** — auto-detects contenteditable vs input/textarea. Uses `execCommand("insertText")` for contenteditable, `.value` + input/change events for regular inputs. Eliminates the #1 eval workaround across LinkedIn, Facebook, Instagram, Notion.
+7. **`aslan html` — page HTML** — like `text` but returns innerHTML. Supports `--selector` to target specific elements. Eliminates the `aslan eval "return document.body.innerHTML..."` pattern.
+8. **`aslan wait --idle/--load`** — wait for page readiness after click-triggered navigation. Polls `__agent._networkIdle` and `__agent._domStable` (idle) or `document.readyState` (load). Eliminates unreliable `sleep` calls.

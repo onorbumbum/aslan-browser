@@ -25,7 +25,7 @@ Each phase is a self-contained workflow document with a corresponding state file
 | 6 | `phase-6-python-sdk.md` | `state/phase-6-plan.json` | Python client library, benchmarks, documentation |
 | 7 | `phase-7-usability-and-multi-agent.md` | `state/phase-7-plan.json` | Edit menu (Cmd+V), window controls, address bar, sessions, batch ops |
 | 8 | `phase-8-loading-feedback.md` | `state/phase-8-plan.json` | Status bar, Go/Stop button, loading visual feedback |
-| 9 | `phase-9-cli.md` | `state/phase-9-plan.json` | `aslan` CLI — token-efficient agent interface (25 commands) |
+| 9 | `phase-9-cli.md` | `state/phase-9-plan.json` | `aslan` CLI — token-efficient agent interface (28 commands) |
 
 ## Rules for Agents
 
