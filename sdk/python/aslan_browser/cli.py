@@ -8,10 +8,10 @@ import os
 import sys
 from typing import Any, Optional
 
+from aslan_browser import __version__
 from aslan_browser.client import AslanBrowser, AslanBrowserError
 
 _STATE_FILE = "/tmp/aslan-cli.json"
-_VERSION = "0.1.0"
 
 
 # ── State management ──────────────────────────────────────────────
@@ -126,7 +126,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="aslan",
         description="Drive Aslan Browser from the command line.",
     )
-    parser.add_argument("--version", action="version", version=f"aslan {_VERSION}")
+    parser.add_argument("--version", action="version", version=f"aslan {__version__}")
 
     sub = parser.add_subparsers(dest="command")
 
