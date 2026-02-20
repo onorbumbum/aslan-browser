@@ -27,8 +27,9 @@ Operational rules for driving Aslan via the `aslan` CLI. Loaded every session.
 
 - **contenteditable fields** (LinkedIn, Facebook, Notion): `aslan fill` sets `.value` which has no effect.
   Use: `aslan eval 'return (function(){ var el = document.querySelector("[contenteditable]"); el.focus(); document.execCommand("insertText", false, "text"); return "done"; })()'`
-- **File uploads**: Native picker can't be automated. Inject via DataTransfer API:
-  base64-encode file → construct `File` object in JS via `aslan eval` → set `input.files` via `DataTransfer` → dispatch `change` event.
+- **File uploads**: Native picker can't be automated. Use `aslan upload <file>` — it handles base64 encoding and DataTransfer injection automatically.
+  Click the media/upload button first so the `input[type=file]` is in the DOM, then: `aslan upload /path/to/photo.jpg`
+  Use `--selector` if there are multiple file inputs.
 - **React inputs**: Many React apps ignore `.value` changes.
   Use `aslan eval` with `execCommand("insertText")` or dispatch `input`/`change` events manually.
 

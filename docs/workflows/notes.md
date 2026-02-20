@@ -567,7 +567,7 @@ Total socket calls for opening + reading 6 dentist pages: **5 calls** (create se
 - Added `aslan` CLI tool (sdk/python/aslan_browser/cli.py, ~630 lines)
 - Entry point via pyproject.toml [project.scripts]
 - State file at /tmp/aslan-cli.json tracks current tab
-- 24 commands: status, source, nav, back, forward, reload, tree, title, url, text, eval, click, fill, select, key, scroll, shot, tabs, tab:new, tab:close, tab:use, tab:wait, cookies, set-cookie
+- 25 commands: status, source, nav, back, forward, reload, tree, title, url, text, eval, click, fill, select, key, scroll, upload, shot, tabs, tab:new, tab:close, tab:use, tab:wait, cookies, set-cookie
 - CLI_REFERENCE.md — agent-facing cheat sheet (~190 lines)
 - Rewrote SKILL.md to teach CLI instead of Python SDK (~108 lines, down from ~300+)
 - Updated knowledge/core.md for CLI-specific gotchas
@@ -582,3 +582,4 @@ Total socket calls for opening + reading 6 dentist pages: **5 calls** (create se
 2. **Tab not found auto-recovery** — if current tab doesn't exist, reset to tab0 and retry once.
 3. **Compact output by default** — tree prints one line per node, nav prints title+URL. `--json` flag for programmatic access.
 4. **Zero new dependencies** — pure Python, wraps existing AslanBrowser SDK client.
+5. **`aslan upload` added after initial implementation** — file upload via DataTransfer API was the one operation that still required Python SDK boilerplate (base64 string too large for shell arg). Now fully CLI: `aslan upload /path/to/file.jpg`. Generic — works on any site with `input[type=file]`.

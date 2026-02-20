@@ -92,6 +92,26 @@ All interaction commands print `ok` on success.
 
 ---
 
+## File Upload
+
+```bash
+aslan upload <file> [--selector <css>] [--name <override>]
+# Inject a local file into an input[type=file] via DataTransfer API.
+# Default selector: input[type="file"]. Auto-detects MIME type.
+```
+
+**Example:**
+```bash
+# Click the media button first to create the file input, then:
+aslan upload /tmp/photo.jpg
+# uploaded photo.jpg (52431 bytes)
+
+# Custom selector:
+aslan upload /tmp/doc.pdf --selector "#file-upload"
+```
+
+---
+
 ## Screenshots
 
 ```bash

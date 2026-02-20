@@ -36,11 +36,9 @@
 
 - For each image file:
   - If `.webp` → convert first: `sips -s format jpeg {path} --out {path}.jpg`
-- Click "Add a photo" / media button — **MUST happen BEFORE file injection**
-- Wait for `input[type="file"]` to appear in DOM
-- Inject each file via DataTransfer API:
-  - Base64-encode the file in Python
-  - In JS: decode → construct `File` object → `DataTransfer` → set `input.files` → dispatch `change`
+- Click "Add media" button — **MUST happen BEFORE file injection**
+- Wait for `input[type="file"]` to appear: `aslan tab:wait "input[type=file]"`
+- Upload: `aslan upload /path/to/image.jpg`
 
 ### 4. Post
 

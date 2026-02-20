@@ -222,6 +222,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--tab", help="Target tab ID")
     p.set_defaults(func=cmd_scroll)
 
+    # ── file upload ────────────────────────────────────────────────
+    p = sub.add_parser("upload", help="Upload a file to an input[type=file]")
+    p.add_argument("file", help="Path to file to upload")
+    p.add_argument("--selector", default='input[type="file"]',
+                    help='CSS selector for file input (default: input[type="file"])')
+    p.add_argument("--name", help="Override filename sent to the page")
+    p.add_argument("--tab", help="Target tab ID")
+    p.set_defaults(func=cmd_upload)
+
     # ── screenshots ───────────────────────────────────────────────
     p = sub.add_parser("shot", help="Take a screenshot")
     p.add_argument("path", nargs="?", default="/tmp/aslan-screenshot.jpg",
@@ -482,6 +491,51 @@ def cmd_scroll(args: argparse.Namespace) -> None:
         else:
             b.scroll(y=500, tab_id=tab)  # default: scroll down 500px
         print("ok")
+    finally:
+        b.close()
+
+
+# ── file upload ───────────────────────────────────────────────────
+
+def cmd_upload(args: argparse.Namespace) -> None:
+    import base64
+    import mimetypes
+
+    filepath = os.path.abspath(args.file)
+    if not os.path.exists(filepath):
+        print(f"Error: file not found: {filepath}", file=sys.stderr)
+        sys.exit(1)
+
+    filename = args.name or os.path.basename(filepath)
+    mimetype = mimetypes.guess_type(filepath)[0] or "application/octet-stream"
+
+    with open(filepath, "rb") as f:
+        b64data = base64.b64encode(f.read()).decode()
+
+    tab = _current_tab(args)
+    selector = args.selector
+
+    js = """
+    var input = document.querySelector(sel);
+    if (!input) return "error: no element matches selector";
+    var binary = atob(b64data);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    var file = new File([bytes], fname, { type: mime });
+    var dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    return "uploaded " + fname + " (" + file.size + " bytes)";
+    """
+
+    b = _connect()
+    try:
+        result = b.evaluate(
+            js, tab_id=tab,
+            args={"sel": selector, "b64data": b64data, "fname": filename, "mime": mimetype},
+        )
+        print(result or "ok")
     finally:
         b.close()
 
