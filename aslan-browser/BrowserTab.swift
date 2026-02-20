@@ -12,7 +12,7 @@ struct NavigationResult {
 }
 
 @MainActor
-class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
+class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate {
 
     let tabId: String
     let webView: WKWebView
@@ -27,6 +27,11 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
     private var messageHandler: ScriptMessageHandler?
     private var urlObservation: NSKeyValueObservation?
     private var titleObservation: NSKeyValueObservation?
+
+    /// Active popup windows (child WKWebViews opened by window.open / target="_blank")
+    private var popupWindows: [NSPanel] = []
+    /// Navigation delegates for popup webviews (must be retained)
+    private var popupNavDelegates: [PopupNavigationDelegate] = []
 
     // Event callback: (method, params) — set by TabManager
     var onEvent: ((_ method: String, _ params: [String: Any]) -> Void)?
@@ -51,6 +56,7 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
 
         let config = WKWebViewConfiguration()
         config.defaultWebpagePreferences.allowsContentJavaScript = true
+        config.preferences.javaScriptCanOpenWindowsAutomatically = true
         config.userContentController.addUserScript(ScriptBridge.makeUserScript())
 
         let frame = NSRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height))
@@ -151,6 +157,7 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
 
         win.delegate = self
         self.webView.navigationDelegate = self
+        self.webView.uiDelegate = self
 
         let handler = ScriptMessageHandler { [weak self] body in
             Task { @MainActor in
@@ -334,8 +341,15 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
         for (_, c) in continuations {
             c.resume(throwing: BrowserError.tabNotFound(tabId))
         }
+        // Close any open popup windows
+        for panel in popupWindows {
+            panel.orderOut(nil)
+        }
+        popupWindows.removeAll()
+        popupNavDelegates.removeAll()
         webView.stopLoading()
         webView.navigationDelegate = nil
+        webView.uiDelegate = nil
         webView.configuration.userContentController.removeAllScriptMessageHandlers()
         webView.removeFromSuperview()
     }
@@ -675,6 +689,135 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
         return base64
     }
 
+    // MARK: - Focus URL Bar
+
+    func focusURLBar() {
+        window.makeKeyAndOrderFront(nil)
+        urlField?.selectText(nil)
+    }
+
+    // MARK: - WKUIDelegate (Popups, Alerts)
+
+    /// Handle window.open() and target="_blank" — create popup in NSPanel
+    nonisolated func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        let url = navigationAction.request.url?.absoluteString ?? "nil"
+        popupLog("createWebViewWith called — url: \(url)")
+
+        // Use the provided configuration (shares process pool + data store with parent)
+        let popupWebView = WKWebView(frame: .zero, configuration: configuration)
+        // Keep translatesAutoresizingMaskIntoConstraints = true (default)
+        // so NSWindow manages sizing via autoresizing mask
+
+        let width = windowFeatures.width?.doubleValue ?? 600
+        let height = windowFeatures.height?.doubleValue ?? 700
+        let panelRect = NSRect(x: 0, y: 0, width: width, height: height)
+
+        let panel = NSPanel(
+            contentRect: panelRect,
+            styleMask: [.titled, .closable, .resizable, .utilityWindow],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "Sign In"
+        panel.contentView = popupWebView
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+
+        // Set delegates on popup webView
+        popupWebView.uiDelegate = self
+        let navDelegate = PopupNavigationDelegate()
+        popupWebView.navigationDelegate = navDelegate
+
+        // Track popup and retain the nav delegate (must happen synchronously
+        // since navigationDelegate is weak and navDelegate is a local var)
+        // This nonisolated method is always called on the main thread by WebKit.
+        MainActor.assumeIsolated {
+            self.popupWindows.append(panel)
+            self.popupNavDelegates.append(navDelegate)
+        }
+
+        // Do NOT call popupWebView.load() — WebKit auto-loads the request
+        // when we return the webView. Double-loading breaks redirect chains.
+        popupLog("Popup panel created (\(Int(width))x\(Int(height)))")
+
+        return popupWebView
+    }
+
+    /// Handle window.close() from popup
+    nonisolated func webViewDidClose(_ webView: WKWebView) {
+        Task { @MainActor in
+            // Find and close the panel containing this webView
+            if let index = self.popupWindows.firstIndex(where: { $0.contentView === webView }) {
+                let panel = self.popupWindows.remove(at: index)
+                panel.orderOut(nil)
+                // Remove corresponding nav delegate
+                if index < self.popupNavDelegates.count {
+                    self.popupNavDelegates.remove(at: index)
+                }
+                NSLog("[aslan-browser] Popup closed")
+            }
+        }
+    }
+
+    /// JavaScript alert()
+    nonisolated func webView(
+        _ webView: WKWebView,
+        runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping () -> Void
+    ) {
+        Task { @MainActor in
+            let alert = NSAlert()
+            alert.messageText = message
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            completionHandler()
+        }
+    }
+
+    /// JavaScript confirm()
+    nonisolated func webView(
+        _ webView: WKWebView,
+        runJavaScriptConfirmPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping (Bool) -> Void
+    ) {
+        Task { @MainActor in
+            let alert = NSAlert()
+            alert.messageText = message
+            alert.addButton(withTitle: "OK")
+            alert.addButton(withTitle: "Cancel")
+            let response = alert.runModal()
+            completionHandler(response == .alertFirstButtonReturn)
+        }
+    }
+
+    /// JavaScript prompt()
+    nonisolated func webView(
+        _ webView: WKWebView,
+        runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping (String?) -> Void
+    ) {
+        Task { @MainActor in
+            let alert = NSAlert()
+            alert.messageText = prompt
+            alert.addButton(withTitle: "OK")
+            alert.addButton(withTitle: "Cancel")
+            let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+            input.stringValue = defaultText ?? ""
+            alert.accessoryView = input
+            let response = alert.runModal()
+            completionHandler(response == .alertFirstButtonReturn ? input.stringValue : nil)
+        }
+    }
+
     // MARK: - Loading UI
 
     private func updateLoadingUI() {
@@ -742,6 +885,67 @@ class BrowserTab: NSObject, WKNavigationDelegate, NSWindowDelegate {
             self.navigationContinuation?.resume(throwing: BrowserError.navigationFailed(error.localizedDescription))
             self.navigationContinuation = nil
         }
+    }
+}
+
+// MARK: - Popup Debug Logging
+
+/// Write to /tmp/aslan-popup.log since NSLog doesn't show in `log show`
+func popupLog(_ message: String) {
+    let ts = ISO8601DateFormatter().string(from: Date())
+    let line = "[\(ts)] \(message)\n"
+    let path = "/tmp/aslan-popup.log"
+    if let handle = FileHandle(forWritingAtPath: path) {
+        handle.seekToEndOfFile()
+        handle.write(line.data(using: .utf8)!)
+        handle.closeFile()
+    } else {
+        FileManager.default.createFile(atPath: path, contents: line.data(using: .utf8))
+    }
+}
+
+// MARK: - Popup Navigation Delegate
+
+/// Navigation delegate for popup WKWebViews — logs to /tmp/aslan-popup.log
+class PopupNavigationDelegate: NSObject, WKNavigationDelegate {
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        let url = navigationAction.request.url?.absoluteString ?? "nil"
+        popupLog("decidePolicyFor: \(url) (type: \(navigationAction.navigationType.rawValue))")
+        decisionHandler(.allow)
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        let url = navigationResponse.response.url?.absoluteString ?? "nil"
+        let status = (navigationResponse.response as? HTTPURLResponse)?.statusCode ?? 0
+        popupLog("navigationResponse: \(url) (status: \(status))")
+        decisionHandler(.allow)
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        popupLog("didStartProvisional: \(webView.url?.absoluteString ?? "nil")")
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        let url = webView.url?.absoluteString ?? "nil"
+        popupLog("didFinish: \(url)")
+
+        // Check window.opener and log it for debugging
+        webView.evaluateJavaScript("JSON.stringify({opener: !!window.opener, openerOrigin: window.opener ? 'exists' : 'null', href: window.location.href})") { result, error in
+            if let result = result as? String {
+                popupLog("  window state: \(result)")
+            }
+            if let error = error {
+                popupLog("  JS eval error: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        popupLog("didFail: \(error.localizedDescription)")
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        popupLog("didFailProvisionalNavigation: \(error.localizedDescription)")
     }
 }
 

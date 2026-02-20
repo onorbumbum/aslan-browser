@@ -586,3 +586,39 @@ Total socket calls for opening + reading 6 dentist pages: **5 calls** (create se
 6. **`aslan type` — universal text input** — auto-detects contenteditable vs input/textarea. Uses `execCommand("insertText")` for contenteditable, `.value` + input/change events for regular inputs. Eliminates the #1 eval workaround across LinkedIn, Facebook, Instagram, Notion.
 7. **`aslan html` — page HTML** — like `text` but returns innerHTML. Supports `--selector` to target specific elements. Eliminates the `aslan eval "return document.body.innerHTML..."` pattern.
 8. **`aslan wait --idle/--load`** — wait for page readiness after click-triggered navigation. Polls `__agent._networkIdle` and `__agent._domStable` (idle) or `document.readyState` (load). Eliminates unreliable `sleep` calls.
+
+---
+
+## Post-Phase — Popup / OAuth Support + Cmd+L
+
+**Status:** Complete ✅
+
+### Changes
+- **WKUIDelegate** implemented on BrowserTab — handles `window.open()`, `target="_blank"`, and OAuth popups
+- **Popup windows** open in NSPanel sharing parent's WKProcessPool (critical for `window.opener.postMessage`)
+- **JS alert/confirm/prompt** handled via native NSAlert dialogs
+- **Cmd+L** focuses the address bar (View menu → Focus Address Bar)
+- **`javaScriptCanOpenWindowsAutomatically = true`** on WKWebViewConfiguration
+
+### Popup Implementation Gotchas
+
+1. **Do NOT call `popupWebView.load()` in `createWebViewWith`** — Apple docs say WebKit auto-loads the request when you return the WKWebView. Calling `.load()` manually double-loads and breaks OAuth redirect chains (popup goes white after account selection).
+
+2. **Do NOT set `translatesAutoresizingMaskIntoConstraints = false` on popup contentView** — NSWindow manages contentView sizing via autoresizing mask. Setting this to false can cause zero-size rendering.
+
+3. **Must retain popup's navigation delegate synchronously** — `WKWebView.navigationDelegate` is a weak reference. If the delegate is a local variable in `createWebViewWith` (which is `nonisolated`), it gets deallocated before async `Task { @MainActor in }` runs. Use `MainActor.assumeIsolated {}` to retain it immediately.
+
+4. **`window.opener` works correctly** — Confirmed via logging that `window.opener` is `true` throughout the entire Google OAuth redirect chain (AccountChooser → ServiceLogin → InteractiveLogin → consent → gsi/transform). The provided `WKWebViewConfiguration` shares the process pool automatically.
+
+5. **Google OAuth uses `redirect_uri=gis_transform` with `response_mode=form_post`** — The popup navigates through ~8 redirects within `accounts.google.com`, ending at `/gsi/transform` which posts the token back to the opener via `postMessage`.
+
+### Debugging
+
+- Popup navigation logs write to `/tmp/aslan-popup.log` (NSLog doesn't show in `log show` for this app).
+- Each popup navigation step (decidePolicyFor, didStartProvisional, didFinish, didFail) is logged with URL and status.
+- `window.opener` state is checked and logged on every `didFinish`.
+
+### Files Modified
+- `aslan-browser/BrowserTab.swift` — WKUIDelegate conformance, popup panel creation, PopupNavigationDelegate, focusURLBar(), JS alert/confirm/prompt handlers
+- `aslan-browser/AppDelegate.swift` — View menu with Cmd+L, focusAddressBar action
+- `aslan-browser/TabManager.swift` — tabForWindow() lookup helper

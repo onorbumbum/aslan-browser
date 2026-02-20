@@ -88,8 +88,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
         editMenuItem.submenu = editMenu
 
+        // ── View menu ──
+        let viewMenuItem = NSMenuItem()
+        mainMenu.addItem(viewMenuItem)
+        let viewMenu = NSMenu(title: "View")
+        viewMenu.addItem(NSMenuItem(title: "Focus Address Bar", action: #selector(focusAddressBar), keyEquivalent: "l"))
+        viewMenuItem.submenu = viewMenu
+
         NSApp.mainMenu = mainMenu
         NSLog("[aslan-browser] Main menu set with \(NSApp.mainMenu?.items.count ?? 0) items")
+    }
+
+    @objc private func focusAddressBar() {
+        // Find the BrowserTab that owns the current key window
+        guard let keyWindow = NSApp.keyWindow else { return }
+        if let tab = tabManager?.tabForWindow(keyWindow) {
+            tab.focusURLBar()
+        }
     }
 
     @objc private func showAboutPanel() {

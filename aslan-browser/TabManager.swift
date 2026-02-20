@@ -98,6 +98,10 @@ class TabManager {
         return tab
     }
 
+    func tabForWindow(_ window: NSWindow) -> BrowserTab? {
+        return tabs.values.first { $0.window === window }
+    }
+
     func listTabs(sessionId: String? = nil) -> [TabInfo] {
         let filtered = sessionId == nil ? tabs : tabs.filter { $0.value.sessionId == sessionId }
         return filtered.map { (id, tab) in
