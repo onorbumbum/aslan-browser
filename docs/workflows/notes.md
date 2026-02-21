@@ -622,3 +622,21 @@ Total socket calls for opening + reading 6 dentist pages: **5 calls** (create se
 - `aslan-browser/BrowserTab.swift` — WKUIDelegate conformance, popup panel creation, PopupNavigationDelegate, focusURLBar(), JS alert/confirm/prompt handlers
 - `aslan-browser/AppDelegate.swift` — View menu with Cmd+L, focusAddressBar action
 - `aslan-browser/TabManager.swift` — tabForWindow() lookup helper
+
+---
+
+## Post-Phase — Native File Upload Dialog
+
+**Status:** Complete ✅
+
+### Problem
+Clicking `<input type="file">` in the browser did nothing — no file picker appeared. WKWebView requires `WKUIDelegate.webView(_:runOpenPanelWith:initiatedByFrame:completionHandler:)` to present the native file dialog. This method was never implemented.
+
+### Fix
+Added `runOpenPanelWith` to BrowserTab's WKUIDelegate section. Presents `NSOpenPanel` with:
+- `allowsMultipleSelection` from `WKOpenPanelParameters`
+- `allowsDirectories` from `WKOpenPanelParameters`
+- Returns selected URLs on OK, `nil` on cancel
+
+### Files Modified
+- `aslan-browser/BrowserTab.swift` — Added `runOpenPanelWith` delegate method

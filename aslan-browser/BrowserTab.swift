@@ -818,6 +818,28 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         }
     }
 
+    /// File upload — present native NSOpenPanel when user clicks <input type="file">
+    nonisolated func webView(
+        _ webView: WKWebView,
+        runOpenPanelWith parameters: WKOpenPanelParameters,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping ([URL]?) -> Void
+    ) {
+        Task { @MainActor in
+            let panel = NSOpenPanel()
+            panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+            panel.canChooseDirectories = parameters.allowsDirectories
+            panel.canChooseFiles = true
+
+            let response = panel.runModal()
+            if response == .OK {
+                completionHandler(panel.urls)
+            } else {
+                completionHandler(nil)
+            }
+        }
+    }
+
     // MARK: - Loading UI
 
     private func updateLoadingUI() {

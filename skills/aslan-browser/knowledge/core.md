@@ -34,6 +34,29 @@ Operational rules for driving Aslan via the `aslan` CLI. Loaded every session.
 - **React inputs**: Many React apps ignore `.value` changes.
   Use `aslan type` — it dispatches proper `input` and `change` events after setting `.value`.
 
+## Shadow DOM / Web Components
+
+- Modern sites (Reddit, many SPAs) use web components with shadowRoot. The accessibility tree often misses elements inside shadow DOM.
+- When `aslan tree` doesn't show an expected element, use `aslan eval` with a recursive shadowRoot search:
+  ```javascript
+  function deepFind(root, depth=0) {
+    if (depth > 5) return null;
+    // check current level
+    const el = root.querySelector(selector);
+    if (el) return el;
+    // recurse into shadow roots
+    for (const child of root.querySelectorAll("*")) {
+      if (child.shadowRoot) {
+        const found = deepFind(child.shadowRoot, depth+1);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+  ```
+- Some shadow DOM buttons don't respond to simple `.click()`. Dispatch a full pointer event sequence: `pointerdown → mousedown → pointerup → mouseup → click` (all with `{bubbles: true, cancelable: true}`).
+- For form fields inside shadow DOM: find the actual `<textarea>` or `<input>` inside the shadowRoot, set `.value`, then dispatch `input` + `change` events with `{bubbles: true}`.
+
 ## Operational Rules
 
 - Closing all tabs is fine — socket stays alive, create new tabs as needed
