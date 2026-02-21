@@ -98,6 +98,33 @@ If yes, route to the correct file:
 
 ---
 
+## 4. Learn Mode — User-Taught Playbooks
+
+When the user wants to teach a new task:
+
+1. User says "let me teach you how to [task] on [site]"
+2. Start recording:
+   ```bash
+   aslan learn:start <site>-<task>
+   ```
+3. Tell user: "Recording. Go ahead and perform the task in the browser. Click the 📝 button to add notes. Tell me when you're done."
+4. WAIT for user to say they're done. Do NOT interact with the browser during recording.
+5. Stop recording:
+   ```bash
+   aslan learn:stop --json
+   ```
+6. Read the action log. Generate a playbook following the format in `knowledge/playbooks/`.
+7. Save to `knowledge/playbooks/<site>-<task>.md`
+8. Tell user: "Playbook saved. I'll follow it next time."
+
+**Playbook format** — match existing playbooks. Include:
+- Inputs (what varies per execution)
+- Prerequisites (URL, login state)
+- Steps (numbered, with selectors and commands)
+- Known notes (from user annotations)
+
+---
+
 ## Explicit Negations
 
 - DO NOT write Python SDK boilerplate. Use `aslan` CLI commands.

@@ -65,3 +65,13 @@ Operational rules for driving Aslan via the `aslan` CLI. Loaded every session.
 - Tab not found: CLI auto-resets to tab0 and retries once
 - After clicking a link that navigates: use `aslan wait --idle` before reading the new page
 - `aslan wait --load` is faster but less thorough than `--idle` (no network/DOM stability check)
+
+## Learn Mode
+
+- `aslan learn:start <name>` begins recording all user actions across all tabs.
+- `aslan learn:stop --json` returns the full action log with composedPath data for shadow DOM.
+- Screenshots are saved to `/tmp/aslan-learn/<name>/` — review them for visual context.
+- The action log includes `composedPath` arrays that trace through shadow DOM boundaries — use these to write the correct JS eval selectors in the playbook.
+- Input events are debounced (300ms) — the log captures the final value, not every keystroke.
+- Navigation events are logged automatically — the page URL/title at each step is always available.
+- Do NOT browse during recording. The user is performing the task.

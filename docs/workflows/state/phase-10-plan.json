@@ -123,7 +123,7 @@
     },
     {
       "id": "learn-skill-docs",
-      "status": "pending",
+      "status": "done",
       "title": "Update skill docs with learn mode workflow",
       "description": "Add learn mode section to SKILL.md (teaching flow for agents). Add learn commands to SDK_REFERENCE.md. Add learn mode operational notes to knowledge/core.md.",
       "filesToModify": [
@@ -138,7 +138,7 @@
     },
     {
       "id": "learn-integration-test",
-      "status": "pending",
+      "status": "done",
       "title": "End-to-end integration tests for learn mode",
       "description": "Create tests/test_learn.py with tests for: default status, start/stop lifecycle, directory creation/cleanup, double-start error, stop-when-not-recording error, navigation capture during recording, screenshot file existence.",
       "filesToCreate": [

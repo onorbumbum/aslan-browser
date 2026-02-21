@@ -643,9 +643,9 @@ Added `runOpenPanelWith` to BrowserTab's WKUIDelegate section. Presents `NSOpenP
 
 ---
 
-## Phase 10 — Learn Mode (In Progress)
+## Phase 10 — Learn Mode
 
-**Status:** 8/10 work items complete. Remaining: `learn-skill-docs` (partially started), `learn-integration-test`.
+**Status:** Complete ✅
 
 ### Discoveries
 
@@ -672,4 +672,7 @@ Added `runOpenPanelWith` to BrowserTab's WKUIDelegate section. Presents `NSOpenP
 - `sdk/python/aslan_browser/client.py` — learn_start(), learn_stop(), learn_status()
 - `sdk/python/aslan_browser/async_client.py` — async learn_start(), learn_stop(), learn_status()
 - `sdk/python/aslan_browser/cli.py` — aslan learn:start/stop/status commands
-- `skills/aslan-browser/SDK_REFERENCE.md` — Added Learn Mode section (partial — SKILL.md and core.md still need updates)
+- `skills/aslan-browser/SDK_REFERENCE.md` — Added Learn Mode section
+- `skills/aslan-browser/SKILL.md` — Added section 4: Learn Mode teaching flow
+- `skills/aslan-browser/knowledge/core.md` — Added Learn Mode operational notes
+- `sdk/python/tests/test_learn.py` — 8 integration tests (all passing)
