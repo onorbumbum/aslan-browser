@@ -18,10 +18,15 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
     let webView: WKWebView
     let window: NSWindow
     var sessionId: String?
+    weak var learnRecorder: LearnRecorder?
     private var urlField: NSTextField?
     private var goButton: NSButton?
     private var statusBar: NSTextField?
     private var statusBarHeightConstraint: NSLayoutConstraint?
+    private var recLabel: NSTextField?
+    private var addNoteButton: NSButton?
+    private var urlBarToGoConstraint: NSLayoutConstraint?
+    private var urlBarToRecConstraint: NSLayoutConstraint?
 
     private var navigationContinuation: CheckedContinuation<NavigationResult, Error>?
     private var messageHandler: ScriptMessageHandler?
@@ -109,16 +114,52 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         goBtn.translatesAutoresizingMaskIntoConstraints = false
         self.goButton = goBtn
 
+        // Recording UI — hidden by default
+        let recLabel = NSTextField(labelWithString: "● REC")
+        recLabel.font = NSFont.boldSystemFont(ofSize: 11)
+        recLabel.textColor = .systemRed
+        recLabel.isEditable = false
+        recLabel.isBezeled = false
+        recLabel.drawsBackground = false
+        recLabel.translatesAutoresizingMaskIntoConstraints = false
+        recLabel.isHidden = true
+        self.recLabel = recLabel
+
+        let noteBtn = NSButton(frame: .zero)
+        noteBtn.image = NSImage(systemSymbolName: "note.text", accessibilityDescription: "Add Note")
+        noteBtn.bezelStyle = .texturedRounded
+        noteBtn.isBordered = true
+        noteBtn.translatesAutoresizingMaskIntoConstraints = false
+        noteBtn.isHidden = true
+        self.addNoteButton = noteBtn
+
         container.addSubview(urlBar)
+        container.addSubview(recLabel)
+        container.addSubview(noteBtn)
         container.addSubview(goBtn)
         container.addSubview(wv)
         container.addSubview(statusBar)
 
+        // Two URL bar trailing constraints — swap based on recording state
+        let urlToGo = urlBar.trailingAnchor.constraint(equalTo: goBtn.leadingAnchor, constant: -4)
+        let urlToRec = urlBar.trailingAnchor.constraint(equalTo: recLabel.leadingAnchor, constant: -4)
+        urlToGo.isActive = true
+        urlToRec.isActive = false
+        self.urlBarToGoConstraint = urlToGo
+        self.urlBarToRecConstraint = urlToRec
+
         NSLayoutConstraint.activate([
             urlBar.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
             urlBar.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
-            urlBar.trailingAnchor.constraint(equalTo: goBtn.leadingAnchor, constant: -4),
             urlBar.heightAnchor.constraint(equalToConstant: 28),
+
+            recLabel.centerYAnchor.constraint(equalTo: goBtn.centerYAnchor),
+            recLabel.trailingAnchor.constraint(equalTo: noteBtn.leadingAnchor, constant: -4),
+
+            noteBtn.centerYAnchor.constraint(equalTo: goBtn.centerYAnchor),
+            noteBtn.trailingAnchor.constraint(equalTo: goBtn.leadingAnchor, constant: -4),
+            noteBtn.widthAnchor.constraint(equalToConstant: 28),
+            noteBtn.heightAnchor.constraint(equalToConstant: 28),
 
             goBtn.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
             goBtn.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -4),
@@ -154,6 +195,10 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         // Wire up Go button after super.init()
         goBtn.target = self
         goBtn.action = #selector(goButtonAction(_:))
+
+        // Wire up Add Note button after super.init()
+        noteBtn.target = self
+        noteBtn.action = #selector(addNoteAction(_:))
 
         win.delegate = self
         self.webView.navigationDelegate = self
@@ -208,6 +253,20 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
             let source = dict["source"] as? String ?? ""
             let line = dict["line"] as? Int ?? 0
             onEvent?("event.error", ["tabId": tabId, "message": message, "source": source, "line": line])
+        case "learn.action":
+            guard let recorder = learnRecorder, recorder.state == .recording else { break }
+            var actionData = dict
+            actionData.removeValue(forKey: "type") // Remove the message type "learn.action"
+            // Rename "actionType" to "type" in the action data
+            if let actionType = actionData.removeValue(forKey: "actionType") {
+                actionData["type"] = actionType
+            }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 500_000_000) // 500ms for page to react
+                let base64 = try? await self.screenshot(quality: 60, width: 1440)
+                let _ = recorder.addAction(actionData, screenshotData: base64, tabId: self.tabId)
+            }
+
         default:
             NSLog("[aslan-browser] Unknown script message type: \(type)")
         }
@@ -696,6 +755,63 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         urlField?.selectText(nil)
     }
 
+    // MARK: - Learn Mode
+
+    func startLearnMode() {
+        webView.evaluateJavaScript(ScriptBridge.learnModeJS, completionHandler: nil)
+    }
+
+    func stopLearnMode() {
+        webView.evaluateJavaScript(ScriptBridge.learnModeCleanupJS, completionHandler: nil)
+    }
+
+    func setRecordingUI(active: Bool) {
+        recLabel?.isHidden = !active
+        addNoteButton?.isHidden = !active
+
+        if active {
+            urlBarToGoConstraint?.isActive = false
+            urlBarToRecConstraint?.isActive = true
+        } else {
+            urlBarToRecConstraint?.isActive = false
+            urlBarToGoConstraint?.isActive = true
+        }
+    }
+
+    @objc private func addNoteAction(_ sender: NSButton) {
+        guard let recorder = learnRecorder, recorder.state == .recording else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Add Annotation"
+        alert.informativeText = "Describe what you just did or note something important for this step."
+        alert.addButton(withTitle: "Add")
+        alert.addButton(withTitle: "Cancel")
+
+        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 260, height: 80))
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .bezelBorder
+
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 260, height: 80))
+        textView.isEditable = true
+        textView.isRichText = false
+        textView.font = NSFont.systemFont(ofSize: 13)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+
+        scrollView.documentView = textView
+        alert.accessoryView = scrollView
+
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            let text = textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                let _ = recorder.addAnnotation(text: text)
+            }
+        }
+    }
+
     // MARK: - WKUIDelegate (Popups, Alerts)
 
     /// Handle window.open() and target="_blank" — create popup in NSPanel
@@ -886,6 +1002,22 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
             self.updateWindowTitle()
 
             self.onEvent?("event.navigation", ["tabId": self.tabId, "url": url])
+
+            // Learn mode: log navigation and re-inject listeners
+            if let recorder = self.learnRecorder, recorder.state == .recording {
+                let navAction: [String: Any] = [
+                    "type": "navigation",
+                    "url": url,
+                    "pageTitle": title
+                ]
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 500ms for page to settle
+                    let base64 = try? await self.screenshot(quality: 60, width: 1440)
+                    let _ = recorder.addAction(navAction, screenshotData: base64, tabId: self.tabId)
+                }
+                // Re-inject learn listeners (navigation clears JS state)
+                self.startLearnMode()
+            }
         }
     }
 

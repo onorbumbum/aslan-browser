@@ -399,6 +399,20 @@ class AslanBrowser:
                 pass
         return closed
 
+    # ── learn mode ────────────────────────────────────────────────────
+
+    def learn_start(self, name: str) -> dict:
+        """Start learn mode recording."""
+        return self._call("learn.start", {"name": name})
+
+    def learn_stop(self) -> dict:
+        """Stop learn mode recording. Returns full action log."""
+        return self._call("learn.stop")
+
+    def learn_status(self) -> dict:
+        """Get learn mode status."""
+        return self._call("learn.status")
+
     # ── batch operations ─────────────────────────────────────────────
 
     def batch(self, requests: list[dict]) -> list[dict]:

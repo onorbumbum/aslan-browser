@@ -446,4 +446,178 @@ enum ScriptBridge {
             forMainFrameOnly: true
         )
     }
+
+    // MARK: - Learn Mode JS
+
+    static var learnModeJS: String {
+        """
+        (function() {
+            "use strict";
+            if (window.__agentLearn) return;
+            window.__agentLearn = {};
+
+            function buildComposedPath(event) {
+                var path = event.composedPath();
+                var segments = [];
+                var currentSegment = [];
+
+                for (var i = 0; i < path.length; i++) {
+                    var node = path[i];
+                    if (node === window || node === document) break;
+
+                    if (node.nodeType === 11) {
+                        // ShadowRoot — finalize current segment and start new one
+                        if (currentSegment.length > 0) {
+                            segments.push(currentSegment.join(" > "));
+                        }
+                        currentSegment = [];
+                        continue;
+                    }
+
+                    if (node.nodeType !== 1) continue; // Skip non-element nodes
+
+                    var desc = node.tagName || "";
+                    if (node.id) desc += "#" + node.id;
+                    if (node.className && typeof node.className === "string") {
+                        var classes = node.className.trim().split(/\\s+/).slice(0, 3).join(".");
+                        if (classes) desc += "." + classes;
+                    }
+                    currentSegment.push(desc);
+                }
+
+                if (currentSegment.length > 0) {
+                    segments.push(currentSegment.join(" > "));
+                }
+
+                // Reverse so outermost is first, prefix shadow segments
+                segments.reverse();
+                for (var s = 1; s < segments.length; s++) {
+                    segments[s] = "#shadow-root > " + segments[s];
+                }
+
+                return segments;
+            }
+
+            function buildTargetInfo(event) {
+                var el = event.target;
+                if (!el || !el.tagName) return {};
+
+                var attrs = {};
+                var attrNames = ["id", "class", "name", "type", "role", "aria-label",
+                    "aria-labelledby", "data-testid", "placeholder", "href", "src",
+                    "action", "value", "contenteditable"];
+                for (var a = 0; a < attrNames.length; a++) {
+                    var val = el.getAttribute(attrNames[a]);
+                    if (val !== null && val !== "") attrs[attrNames[a]] = val;
+                }
+
+                var text = (el.textContent || "").replace(/\\s+/g, " ").trim();
+                if (text.length > 80) text = text.substring(0, 80);
+
+                var rect = el.getBoundingClientRect();
+
+                return {
+                    tagName: el.tagName,
+                    textContent: text,
+                    attributes: attrs,
+                    composedPath: buildComposedPath(event),
+                    rect: {
+                        x: Math.round(rect.x),
+                        y: Math.round(rect.y),
+                        w: Math.round(rect.width),
+                        h: Math.round(rect.height)
+                    }
+                };
+            }
+
+            // --- Click listener ---
+            window.__agentLearn.onClick = function(event) {
+                var target = buildTargetInfo(event);
+                window.__agent.post("learn.action", {
+                    actionType: "click",
+                    url: window.location.href,
+                    pageTitle: document.title,
+                    target: target,
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                    button: event.button
+                });
+            };
+
+            // --- Input listener (debounced) ---
+            var inputTimer = null;
+            window.__agentLearn.onInput = function(event) {
+                // Capture target info synchronously (composedPath only available during dispatch)
+                var target = buildTargetInfo(event);
+                var val = event.target.value !== undefined ? event.target.value : (event.target.textContent || "");
+                if (inputTimer) clearTimeout(inputTimer);
+                inputTimer = setTimeout(function() {
+                    window.__agent.post("learn.action", {
+                        actionType: "input",
+                        url: window.location.href,
+                        pageTitle: document.title,
+                        target: target,
+                        value: val
+                    });
+                }, 300);
+            };
+
+            // --- Keydown listener (filtered) ---
+            window.__agentLearn.onKeydown = function(event) {
+                var dominated = ["Enter", "Tab", "Escape", "Backspace", "Delete"];
+                var isSpecial = dominated.indexOf(event.key) !== -1;
+                var hasModifier = event.ctrlKey || event.metaKey || event.altKey;
+                if (!isSpecial && !hasModifier) return;
+
+                var target = buildTargetInfo(event);
+                window.__agent.post("learn.action", {
+                    actionType: "keydown",
+                    url: window.location.href,
+                    pageTitle: document.title,
+                    target: target,
+                    key: event.key,
+                    code: event.code,
+                    ctrlKey: event.ctrlKey,
+                    shiftKey: event.shiftKey,
+                    altKey: event.altKey,
+                    metaKey: event.metaKey
+                });
+            };
+
+            // --- Scroll listener (debounced) ---
+            var scrollTimer = null;
+            window.__agentLearn.onScroll = function() {
+                if (scrollTimer) clearTimeout(scrollTimer);
+                scrollTimer = setTimeout(function() {
+                    window.__agent.post("learn.action", {
+                        actionType: "scroll",
+                        url: window.location.href,
+                        pageTitle: document.title,
+                        scrollX: window.scrollX,
+                        scrollY: window.scrollY
+                    });
+                }, 500);
+            };
+
+            // Register all listeners
+            document.addEventListener("click", window.__agentLearn.onClick, {capture: true, passive: true});
+            document.addEventListener("input", window.__agentLearn.onInput, {capture: true, passive: true});
+            document.addEventListener("keydown", window.__agentLearn.onKeydown, {capture: true, passive: true});
+            document.addEventListener("scroll", window.__agentLearn.onScroll, {capture: true, passive: true});
+        })();
+        """
+    }
+
+    static var learnModeCleanupJS: String {
+        """
+        (function() {
+            if (!window.__agentLearn) return;
+            document.removeEventListener("click", window.__agentLearn.onClick, true);
+            document.removeEventListener("input", window.__agentLearn.onInput, true);
+            document.removeEventListener("keydown", window.__agentLearn.onKeydown, true);
+            document.removeEventListener("scroll", window.__agentLearn.onScroll, true);
+            delete window.__agentLearn;
+        })();
+        """
+    }
 }

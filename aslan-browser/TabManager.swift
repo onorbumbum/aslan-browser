@@ -19,6 +19,8 @@ class TabManager {
     private let isHidden: Bool
     private var closingTabs: [BrowserTab] = [] // Prevent premature dealloc during window close
 
+    let learnRecorder = LearnRecorder()
+
     // Session tracking
     private var sessions: [String: Session] = [:]
     private var nextSessionId: Int = 0
@@ -70,7 +72,19 @@ class TabManager {
             try? self?.closeTab(id: tabId)
         }
         tab.sessionId = sessionId
+        tab.learnRecorder = learnRecorder
         tabs[tabId] = tab
+
+        if learnRecorder.state == .recording {
+            let _ = learnRecorder.addAction(
+                ["type": "tab.created", "url": "", "pageTitle": ""],
+                screenshotData: nil,
+                tabId: tabId
+            )
+            tab.startLearnMode()
+            tab.setRecordingUI(active: true)
+        }
+
         return tabId
     }
 
@@ -78,6 +92,17 @@ class TabManager {
         guard let tab = tabs.removeValue(forKey: id) else {
             throw BrowserError.tabNotFound(id)
         }
+
+        if learnRecorder.state == .recording {
+            let url = tab.webView.url?.absoluteString ?? ""
+            let title = tab.webView.title ?? ""
+            let _ = learnRecorder.addAction(
+                ["type": "tab.closed", "url": url, "pageTitle": title],
+                screenshotData: nil,
+                tabId: id
+            )
+        }
+
         tab.cleanup()
         tab.window.animationBehavior = .none
         tab.window.orderOut(nil)
@@ -96,6 +121,26 @@ class TabManager {
             throw BrowserError.tabNotFound(id)
         }
         return tab
+    }
+
+    // MARK: - Learn Mode
+
+    func startLearnMode(name: String) throws -> [String: Any] {
+        let screenshotDir = try learnRecorder.start(name: name)
+        for tab in tabs.values {
+            tab.startLearnMode()
+            tab.setRecordingUI(active: true)
+        }
+        return ["ok": true, "name": name, "screenshotDir": screenshotDir]
+    }
+
+    func stopLearnMode() throws -> [String: Any] {
+        let result = try learnRecorder.stop()
+        for tab in tabs.values {
+            tab.stopLearnMode()
+            tab.setRecordingUI(active: false)
+        }
+        return result
     }
 
     func tabForWindow(_ window: NSWindow) -> BrowserTab? {

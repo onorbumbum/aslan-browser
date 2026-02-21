@@ -438,6 +438,20 @@ class AsyncAslanBrowser:
                 pass
         return closed
 
+    # ── learn mode ────────────────────────────────────────────────────
+
+    async def learn_start(self, name: str) -> dict:
+        """Start learn mode recording."""
+        return await self._call("learn.start", {"name": name})
+
+    async def learn_stop(self) -> dict:
+        """Stop learn mode recording. Returns full action log."""
+        return await self._call("learn.stop")
+
+    async def learn_status(self) -> dict:
+        """Get learn mode status."""
+        return await self._call("learn.status")
+
     # ── batch operations ─────────────────────────────────────────────
 
     async def batch(self, requests: list[dict]) -> list[dict]:

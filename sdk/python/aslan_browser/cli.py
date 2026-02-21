@@ -287,6 +287,19 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--tab", help="Target tab ID")
     p.set_defaults(func=cmd_tab_wait)
 
+    # ── learn mode ────────────────────────────────────────────────
+    p = sub.add_parser("learn:start", help="Start learn mode recording")
+    p.add_argument("name", help="Recording name (e.g., reddit-create-post)")
+    p.set_defaults(func=cmd_learn_start)
+
+    p = sub.add_parser("learn:stop", help="Stop learn mode recording")
+    p.add_argument("--json", action="store_true", dest="json_output",
+                    help="Output full action log as JSON")
+    p.set_defaults(func=cmd_learn_stop)
+
+    p = sub.add_parser("learn:status", help="Check learn mode status")
+    p.set_defaults(func=cmd_learn_status)
+
     # ── cookies ───────────────────────────────────────────────────
     p = sub.add_parser("cookies", help="Get cookies")
     p.add_argument("--url", help="Filter by URL")
@@ -758,6 +771,48 @@ def cmd_tab_wait(args: argparse.Namespace) -> None:
     try:
         b.wait_for_selector(args.selector, tab_id=tab, timeout=args.timeout)
         print("found")
+    finally:
+        b.close()
+
+
+# ── learn mode ────────────────────────────────────────────────────
+
+def cmd_learn_start(args: argparse.Namespace) -> None:
+    b = _connect()
+    try:
+        result = b.learn_start(args.name)
+        print(f"Recording: {args.name}")
+        print(f"Screenshots: {result.get('screenshotDir', '')}")
+    finally:
+        b.close()
+
+
+def cmd_learn_stop(args: argparse.Namespace) -> None:
+    b = _connect()
+    try:
+        result = b.learn_stop()
+        if getattr(args, "json_output", False):
+            _print_json(result)
+        else:
+            name = result.get("name", "?")
+            count = result.get("actionCount", 0)
+            duration = result.get("duration", 0)
+            print(f"Stopped: {name}")
+            print(f"Actions: {count}")
+            print(f"Duration: {duration / 1000:.1f}s")
+            print(f"Screenshots: {result.get('screenshotDir', '')}")
+    finally:
+        b.close()
+
+
+def cmd_learn_status(args: argparse.Namespace) -> None:
+    b = _connect()
+    try:
+        result = b.learn_status()
+        if result.get("recording"):
+            print(f"Recording: {result.get('name', '?')} ({result.get('actionCount', 0)} actions)")
+        else:
+            print("Not recording")
     finally:
         b.close()
 

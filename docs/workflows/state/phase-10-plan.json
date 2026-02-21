@@ -1,0 +1,153 @@
+{
+  "metadata": {
+    "phase": "10",
+    "name": "Learn Mode",
+    "description": "Record user actions in the browser for automatic playbook generation",
+    "projectRoot": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser",
+    "sourceDir": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser",
+    "xcodeprojPath": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/aslan-browser.xcodeproj",
+    "scheme": "aslan-browser",
+    "socketPath": "/tmp/aslan-browser.sock",
+    "sdkDir": "sdk/python",
+    "skillDir": "skills/aslan-browser",
+    "learnTmpDir": "/tmp/aslan-learn",
+    "previousPhase": "9"
+  },
+  "workItems": [
+    {
+      "id": "learn-recorder-model",
+      "status": "done",
+      "title": "Create LearnRecorder — recording state machine and data model",
+      "description": "Create LearnRecorder.swift with state machine (idle/recording), action array storage, annotation support, temp directory management (/tmp/aslan-learn/{name}/), and screenshot file writing. Also add learnModeError case to BrowserError and RPCError.",
+      "filesToCreate": [
+        "aslan-browser/LearnRecorder.swift"
+      ],
+      "filesToModify": [
+        "aslan-browser/Models/BrowserError.swift",
+        "aslan-browser/Models/RPCMessage.swift"
+      ],
+      "dependsOn": [],
+      "verifyBuild": true
+    },
+    {
+      "id": "learn-js-listeners",
+      "status": "done",
+      "title": "Add learn-mode JavaScript event listeners to ScriptBridge",
+      "description": "Add learnModeJS and learnModeCleanupJS static properties to ScriptBridge. JS captures click, input (debounced 300ms), keydown (filtered to special keys + modifiers), and scroll (debounced 500ms) events. Uses event.composedPath() for full shadow DOM tracing. Posts learn.action messages via window.__agent.post(). Listeners use {capture: true, passive: true}. Separate from always-injected JS — injected on-demand.",
+      "filesToModify": [
+        "aslan-browser/ScriptBridge.swift"
+      ],
+      "dependsOn": [],
+      "verifyBuild": true
+    },
+    {
+      "id": "learn-browser-tab-wiring",
+      "status": "done",
+      "title": "Wire BrowserTab to route learn actions and manage learn JS lifecycle",
+      "description": "Add learnRecorder weak reference to BrowserTab. Route learn.action script messages to LearnRecorder with post-action screenshots (500ms delay, quality 60). Add startLearnMode()/stopLearnMode() methods to inject/remove learn JS. Re-inject learn JS after navigation (didFinish) since page reload clears JS state. Log navigation events to LearnRecorder during recording.",
+      "filesToModify": [
+        "aslan-browser/BrowserTab.swift"
+      ],
+      "dependsOn": [
+        "learn-recorder-model",
+        "learn-js-listeners"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "learn-tab-manager-wiring",
+      "status": "done",
+      "title": "TabManager owns LearnRecorder and coordinates recording across tabs",
+      "description": "Add LearnRecorder property to TabManager. Set learnRecorder on every tab at creation. Add startLearnMode(name:)/stopLearnMode() methods that propagate to all tabs. Auto-inject learn JS on new tabs created during recording. Log tab.created/tab.closed events during recording.",
+      "filesToModify": [
+        "aslan-browser/TabManager.swift"
+      ],
+      "dependsOn": [
+        "learn-browser-tab-wiring"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "learn-rpc-methods",
+      "status": "done",
+      "title": "Wire learn.start, learn.stop, learn.status, learn.note in MethodRouter",
+      "description": "Add four new JSON-RPC method cases to MethodRouter.dispatch(). learn.start requires name param, calls tabManager.startLearnMode(). learn.stop calls tabManager.stopLearnMode() and returns full action log. learn.status returns recording state. learn.note adds annotation text to current recording.",
+      "filesToModify": [
+        "aslan-browser/MethodRouter.swift"
+      ],
+      "dependsOn": [
+        "learn-tab-manager-wiring"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "learn-recording-ui",
+      "status": "done",
+      "title": "Add REC indicator and Add Note button to BrowserTab toolbar",
+      "description": "Add red '● REC' NSTextField label and NSButton with SF Symbol (note.text) to toolbar, positioned between URL bar and Go button. Both hidden by default, shown when recording active. Add Note button opens NSAlert with NSScrollView+NSTextView (multi-line text area) for annotation input. Use swappable trailing constraints on URL bar to reclaim space when hidden. TabManager toggles UI via tab.setRecordingUI(active:).",
+      "filesToModify": [
+        "aslan-browser/BrowserTab.swift",
+        "aslan-browser/TabManager.swift"
+      ],
+      "dependsOn": [
+        "learn-rpc-methods"
+      ],
+      "verifyBuild": true
+    },
+    {
+      "id": "learn-sdk-methods",
+      "status": "done",
+      "title": "Add learn mode methods to Python SDK",
+      "description": "Add learn_start(name), learn_stop(), learn_status() to both AslanBrowser (client.py) and AsyncAslanBrowser (async_client.py).",
+      "filesToModify": [
+        "sdk/python/aslan_browser/client.py",
+        "sdk/python/aslan_browser/async_client.py"
+      ],
+      "dependsOn": [
+        "learn-rpc-methods"
+      ],
+      "verifyBuild": false
+    },
+    {
+      "id": "learn-cli-commands",
+      "status": "done",
+      "title": "Add aslan learn:start/stop/status CLI commands",
+      "description": "Add learn:start <name>, learn:stop [--json], and learn:status commands to cli.py. Follows existing tab:* command pattern. learn:stop prints summary by default, full JSON with --json flag.",
+      "filesToModify": [
+        "sdk/python/aslan_browser/cli.py"
+      ],
+      "dependsOn": [
+        "learn-sdk-methods"
+      ],
+      "verifyBuild": false
+    },
+    {
+      "id": "learn-skill-docs",
+      "status": "pending",
+      "title": "Update skill docs with learn mode workflow",
+      "description": "Add learn mode section to SKILL.md (teaching flow for agents). Add learn commands to SDK_REFERENCE.md. Add learn mode operational notes to knowledge/core.md.",
+      "filesToModify": [
+        "skills/aslan-browser/SKILL.md",
+        "skills/aslan-browser/SDK_REFERENCE.md",
+        "skills/aslan-browser/knowledge/core.md"
+      ],
+      "dependsOn": [
+        "learn-cli-commands"
+      ],
+      "verifyBuild": false
+    },
+    {
+      "id": "learn-integration-test",
+      "status": "pending",
+      "title": "End-to-end integration tests for learn mode",
+      "description": "Create tests/test_learn.py with tests for: default status, start/stop lifecycle, directory creation/cleanup, double-start error, stop-when-not-recording error, navigation capture during recording, screenshot file existence.",
+      "filesToCreate": [
+        "sdk/python/tests/test_learn.py"
+      ],
+      "dependsOn": [
+        "learn-cli-commands"
+      ],
+      "verifyBuild": false
+    }
+  ]
+}

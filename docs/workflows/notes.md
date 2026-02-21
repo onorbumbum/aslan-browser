@@ -640,3 +640,36 @@ Added `runOpenPanelWith` to BrowserTab's WKUIDelegate section. Presents `NSOpenP
 
 ### Files Modified
 - `aslan-browser/BrowserTab.swift` — Added `runOpenPanelWith` delegate method
+
+---
+
+## Phase 10 — Learn Mode (In Progress)
+
+**Status:** 8/10 work items complete. Remaining: `learn-skill-docs` (partially started), `learn-integration-test`.
+
+### Discoveries
+
+1. **`window.__agent.post()` merges data keys into the message object, overwriting `type`** — The post helper does `msg = { type: messageType }` then iterates data keys and assigns them to `msg`. If the data object contains a `type` key (e.g., `type: "click"`), it overwrites the message type. This means `handleScriptMessage` never sees `"learn.action"` as the type — it sees `"click"` instead.
+
+   **Fix:** Learn JS uses `actionType` instead of `type` for the action-specific type. `BrowserTab.handleScriptMessage` routes on `"learn.action"` (which survives because the data uses `actionType`), then renames `actionType` → `type` in the action data before passing to LearnRecorder.
+
+2. **Recording UI uses swappable trailing constraints** — Two mutually exclusive `NSLayoutConstraint`s on the URL bar's trailing anchor: one pins directly to the Go button (default), the other pins to the REC label (recording active). Toggle via `isActive`. Must deactivate the old constraint before activating the new one to avoid conflicts.
+
+3. **Learn-mode JS must be re-injected after every navigation** — Page reload wipes all JS state. `didFinish` checks if recording is active and calls `startLearnMode()` again. Without this, user actions after the first navigation would not be captured.
+
+4. **`NSButton` target/action must be wired after `super.init()`** — Same pattern as the URL field and Go button. The Add Note button is created before `super.init()` with nil target, then wired to `self` afterward.
+
+### Files Added
+- `aslan-browser/LearnRecorder.swift` — Recording state machine, action storage, screenshot capture
+
+### Files Modified
+- `aslan-browser/Models/BrowserError.swift` — Added `learnModeError` case
+- `aslan-browser/Models/RPCMessage.swift` — Added `RPCError.learnModeError()` factory (code -32005)
+- `aslan-browser/ScriptBridge.swift` — Added `learnModeJS` and `learnModeCleanupJS` static properties
+- `aslan-browser/BrowserTab.swift` — Learn recorder ref, learn.action routing, recording UI (● REC + Add Note), learn JS inject/remove, navigation logging during recording
+- `aslan-browser/TabManager.swift` — Owns LearnRecorder, propagates start/stop to all tabs, auto-inject on new tab, tab lifecycle logging
+- `aslan-browser/MethodRouter.swift` — Wired learn.start, learn.stop, learn.status, learn.note
+- `sdk/python/aslan_browser/client.py` — learn_start(), learn_stop(), learn_status()
+- `sdk/python/aslan_browser/async_client.py` — async learn_start(), learn_stop(), learn_status()
+- `sdk/python/aslan_browser/cli.py` — aslan learn:start/stop/status commands
+- `skills/aslan-browser/SDK_REFERENCE.md` — Added Learn Mode section (partial — SKILL.md and core.md still need updates)

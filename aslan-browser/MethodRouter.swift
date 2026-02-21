@@ -63,6 +63,14 @@ class MethodRouter {
             return try handleSessionDestroy(params)
         case "batch":
             return try await handleBatch(params)
+        case "learn.start":
+            return try handleLearnStart(params)
+        case "learn.stop":
+            return try handleLearnStop(params)
+        case "learn.status":
+            return handleLearnStatus(params)
+        case "learn.note":
+            return try handleLearnNote(params)
         default:
             throw RPCError.methodNotFound(method)
         }
@@ -303,6 +311,34 @@ class MethodRouter {
         }
         let closedTabs = try tabManager.destroySession(id: sessionId)
         return ["ok": true, "closedTabs": closedTabs]
+    }
+
+    // MARK: - Learn Mode
+
+    private func handleLearnStart(_ params: [String: Any]?) throws -> [String: Any] {
+        guard let name = params?["name"] as? String else {
+            throw RPCError.invalidParams("Missing required param: name")
+        }
+        return try tabManager.startLearnMode(name: name)
+    }
+
+    private func handleLearnStop(_ params: [String: Any]?) throws -> [String: Any] {
+        return try tabManager.stopLearnMode()
+    }
+
+    private func handleLearnStatus(_ params: [String: Any]?) -> [String: Any] {
+        return tabManager.learnRecorder.status()
+    }
+
+    private func handleLearnNote(_ params: [String: Any]?) throws -> [String: Any] {
+        guard let text = params?["text"] as? String else {
+            throw RPCError.invalidParams("Missing required param: text")
+        }
+        guard tabManager.learnRecorder.state == .recording else {
+            throw BrowserError.learnModeError("Not recording")
+        }
+        let seq = tabManager.learnRecorder.addAnnotation(text: text)
+        return ["ok": true, "seq": seq]
     }
 
     // MARK: - Batch Operations

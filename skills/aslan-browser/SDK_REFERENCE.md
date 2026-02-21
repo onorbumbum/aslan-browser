@@ -201,6 +201,20 @@ aslan source    # Print SDK source path
 
 ---
 
+## Learn Mode
+
+```bash
+aslan learn:start <name>     # Start recording user actions
+aslan learn:stop [--json]    # Stop recording, print summary (--json for full log)
+aslan learn:status           # Check recording state
+```
+
+Learn mode records all user actions (clicks, typing, navigation, scrolling) across all tabs.
+The agent starts recording, the user demonstrates a task, then the agent stops and gets the action log.
+Use the log to generate a playbook in `knowledge/playbooks/`.
+
+---
+
 ## Gotchas
 
 1. **`aslan eval` requires `return`.** `aslan eval "document.title"` → nothing. Use `aslan eval "return document.title"`.

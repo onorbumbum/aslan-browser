@@ -13,6 +13,7 @@ enum BrowserError: Error {
     case tabNotFound(String)
     case sessionNotFound(String)
     case timeout(String)
+    case learnModeError(String)
 
     var rpcError: RPCError {
         switch self {
@@ -30,6 +31,8 @@ enum BrowserError: Error {
             return .sessionNotFound(sessionId)
         case .timeout(let detail):
             return .timeout(detail)
+        case .learnModeError(let detail):
+            return .learnModeError(detail)
         }
     }
 }

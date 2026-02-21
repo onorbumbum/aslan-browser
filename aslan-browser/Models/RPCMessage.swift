@@ -117,6 +117,10 @@ struct RPCError: Error {
     static func sessionNotFound(_ sessionId: String) -> RPCError {
         RPCError(code: -32004, message: "Session not found: \(sessionId)", data: nil)
     }
+
+    static func learnModeError(_ detail: String) -> RPCError {
+        RPCError(code: -32005, message: "Learn mode error", data: detail)
+    }
 }
 
 // MARK: - Parse Errors

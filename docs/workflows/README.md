@@ -26,6 +26,7 @@ Each phase is a self-contained workflow document with a corresponding state file
 | 7 | `phase-7-usability-and-multi-agent.md` | `state/phase-7-plan.json` | Edit menu (Cmd+V), window controls, address bar, sessions, batch ops |
 | 8 | `phase-8-loading-feedback.md` | `state/phase-8-plan.json` | Status bar, Go/Stop button, loading visual feedback |
 | 9 | `phase-9-cli.md` | `state/phase-9-plan.json` | `aslan` CLI — token-efficient agent interface (28 commands) |
+| 10 | `phase-10-learn-mode.md` | `state/phase-10-plan.json` | Learn mode — record user actions for playbook generation |
 
 ## Rules for Agents
 
