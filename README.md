@@ -229,18 +229,35 @@ The skill lives in `skills/aslan-browser/` and includes:
 ```
 skills/aslan-browser/
 ├── SKILL.md                    # Instructions — the "program" the agent follows
-└── learnings/
-    ├── browser.md              # Discovered gotchas and patterns (committed, grows over time)
-    └── user.md                 # User-specific preferences (gitignored)
+├── SDK_REFERENCE.md            # Full CLI reference — agent's cheat sheet
+├── knowledge/
+│   ├── core.md                 # Universal browser/CLI rules (always loaded)
+│   ├── user.md                 # Your preferences (gitignored)
+│   ├── sites/                  # Site-specific selectors and quirks
+│   │   ├── linkedin.com.md
+│   │   ├── instagram.com.md
+│   │   ├── facebook.com.md
+│   │   ├── google.com.md
+│   │   ├── business.google.com.md
+│   │   ├── reddit.com.md
+│   │   ├── hubspot.com.md
+│   │   └── openrouter.ai.md
+│   └── playbooks/              # Step-by-step task recipes
+│       ├── linkedin-create-post.md
+│       ├── instagram-create-post.md
+│       ├── gmb-create-post.md
+│       └── google-load-business-reviews.md
+└── learnings/                  # Compiled after sessions
 ```
 
 | File | Purpose |
 |---|---|
-| `SKILL.md` | Teaches the agent to use the Python SDK, drive interactively (navigate → read → decide → act), handle multi-tab research, and avoid known pitfalls |
-| `learnings/browser.md` | Runtime discoveries — ATS quirks, contenteditable workarounds, site-specific patterns. Agents load this at session start so they don't repeat past mistakes |
-| `learnings/user.md` | Your personal preferences and workflows. Gitignored — stays on your machine |
-
-The SDK Reference at [`sdk/python/SDK_REFERENCE.md`](sdk/python/SDK_REFERENCE.md) is the agent's cheat sheet for all available methods.
+| `SKILL.md` | Teaches the agent to use the CLI, drive interactively (navigate → read → decide → act), handle learn mode, and avoid known pitfalls |
+| `SDK_REFERENCE.md` | Complete `aslan` CLI reference — every command with examples. Loaded at session start |
+| `knowledge/core.md` | Universal rules — ATS quirks, contenteditable workarounds, @eN ref lifecycle. Always loaded |
+| `knowledge/sites/*.md` | Site-specific selectors, login flows, and gotchas. Loaded when visiting that domain |
+| `knowledge/playbooks/*.md` | Repeatable task recipes (LinkedIn post, GMB post, etc.). Loaded when the task matches |
+| `knowledge/user.md` | Your personal preferences and workflows. Gitignored — stays on your machine |
 
 ### Installing the Skill
 
@@ -265,7 +282,24 @@ When your agent gets a browsing task, it loads the skill and follows this loop:
 3. **Drive interactively** — Navigate → read the page → decide next action → act → repeat
 4. **Self-improve** — After the task, append any new discoveries to `learnings/browser.md`
 
-The learnings files are the skill's persistent memory. Each session starts by loading them, and ends by appending anything new. Over time, the skill gets smarter about site-specific quirks, workarounds, and efficient patterns.
+The knowledge files are the skill's persistent memory. Each session starts by loading the relevant files, and ends by routing any new discoveries to the right place (`core.md`, a site file, or a new playbook). Over time, the skill gets smarter about site-specific quirks, workarounds, and efficient patterns.
+
+### Learn Mode
+
+Aslan has a **learn mode** that lets you teach it new tasks by demonstration. Instead of writing playbooks by hand, you perform a task in the browser while Aslan records what you do — every click, fill, keypress, and navigation — then the agent converts the recording into a structured playbook.
+
+```bash
+# 1. Start recording
+aslan learn:start linkedin-create-post
+
+# 2. Perform the task in the browser (Aslan watches)
+#    Click the 📝 button in the browser UI to add notes at any point
+
+# 3. Stop recording and get the action log
+aslan learn:stop --json
+```
+
+When a user says *"let me teach you how to..."*, the skill starts recording, waits silently while the user demonstrates, then converts the action log into a playbook saved to `knowledge/playbooks/<site>-<task>.md`. Next time the same task comes up, the agent loads and follows that playbook.
 
 ---
 
@@ -458,6 +492,7 @@ Use `ref` values (`@e0`, `@e1`, ...) in `click()`, `fill()`, etc.
 | `select(target, value, tab_id)` | Select a dropdown option |
 | `keypress(key, tab_id, modifiers)` | Send a keypress (`"Enter"`, `"Tab"`, etc.) |
 | `scroll(x, y, target, tab_id)` | Scroll the page or an element |
+| `upload(file_path, tab_id)` | Inject a file into the browser via the native file-picker dialog |
 
 ### Screenshots
 
@@ -496,6 +531,17 @@ Use `ref` values (`@e0`, `@e1`, ...) in `click()`, `fill()`, etc.
 | `parallel_navigate(urls, wait_until)` | Navigate multiple tabs simultaneously |
 | `parallel_get_trees(tab_ids)` | Get accessibility trees from multiple tabs |
 | `parallel_screenshots(tab_ids, quality, width)` | Screenshot multiple tabs at once |
+
+### Learn Mode
+
+| Method | Description |
+|---|---|
+| `learn_start(name)` | Start recording user interactions. `name` becomes the playbook filename |
+| `learn_stop(as_json=False)` | Stop recording. Returns the action log (text summary or JSON array) |
+| `learn_status()` | Check if recording is active; returns name and event count |
+| `learn_note(text)` | Append a text annotation to the current recording |
+
+CLI equivalents: `aslan learn:start <name>`, `aslan learn:stop [--json]`, `aslan learn:status`
 
 ---
 
@@ -575,6 +621,7 @@ aslan-browser/
 │   ├── JSONRPCHandler.swift    # JSON-RPC 2.0 parser + response builder
 │   ├── MethodRouter.swift      # Maps JSON-RPC methods to BrowserTab calls
 │   ├── ScriptBridge.swift      # Injected JS: a11y tree, readiness, interaction
+│   ├── LearnRecorder.swift     # Learn mode — records user interactions for playbook generation
 │   └── Models/
 │       ├── RPCMessage.swift
 │       ├── A11yNode.swift
@@ -603,7 +650,7 @@ aslan-browser/
 └── aslan-browser.xcodeproj
 ```
 
-~2,000 lines of Swift, ~600 lines of Python. Two external dependencies (SwiftNIO).
+~2,800 lines of Swift, ~1,900 lines of Python. Two external dependencies (SwiftNIO).
 
 ---
 
@@ -716,6 +763,8 @@ The [Python SDK source](sdk/python/aslan_browser/client.py) is a complete client
 ## Roadmap
 
 - [x] Pre-built binaries on GitHub Releases
+- [x] File upload support (native dialog + DataTransfer API injection) — v1.4.0
+- [x] Learn mode — record user interactions to auto-generate playbooks — v1.5.0
 - [ ] `pip install aslan-browser` on PyPI
 - [ ] Content blocking (ad/tracker filtering via `WKContentRuleList`)
 - [ ] PDF text extraction

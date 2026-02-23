@@ -402,10 +402,10 @@ color:white;
         <h1>Aslan Browser</h1>
         <p class="splash-line">A browser for AI agents. macOS native. No Chrome. Returns an accessibility tree instead of the raw DOM.</p>
         <div class="splash-stats">
-          <div class="stat-box"><div class="stat-num">~0.5ms</div><div class="stat-lbl">JS eval</div></div>
-          <div class="stat-box"><div class="stat-num">~15ms</div><div class="stat-lbl">screenshot</div></div>
-          <div class="stat-box"><div class="stat-num">0</div><div class="stat-lbl">Python deps</div></div>
-          <div class="stat-box"><div class="stat-num">~2.6k</div><div class="stat-lbl">lines total</div></div>
+          <div class="stat-box"><div class="stat-num" id="stat-js">~0.5ms</div><div class="stat-lbl">JS eval</div></div>
+          <div class="stat-box"><div class="stat-num" id="stat-screenshot">~15ms</div><div class="stat-lbl">screenshot</div></div>
+          <div class="stat-box"><div class="stat-num" id="stat-deps">0</div><div class="stat-lbl">Python deps</div></div>
+          <div class="stat-box"><div class="stat-num" id="stat-lines">~4.7k</div><div class="stat-lbl">lines total</div></div>
         </div>
       </div>
     </div>
@@ -921,11 +921,13 @@ ln -s /path/to/aslan-browser/skills/aslan-browser ~/.claude/skills/aslan-browser
           <div class="ftr"><span class="fi">│   │   ├── </span><span class="fn s">hubspot.com.md</span></div>
           <div class="ftr"><span class="fi">│   │   ├── </span><span class="fn s">app.hubspot.com.md</span></div>
           <div class="ftr"><span class="fi">│   │   ├── </span><span class="fn s">google.com.md</span></div>
+          <div class="ftr"><span class="fi">│   │   ├── </span><span class="fn s">reddit.com.md</span></div>
           <div class="ftr"><span class="fi">│   │   └── </span><span class="fn s">openrouter.ai.md</span></div>
           <div class="ftr"><span class="fi">│   └── </span><span class="fn d">playbooks/</span><span class="fc">step-by-step task recipes</span></div>
           <div class="ftr"><span class="fi">│       ├── </span><span class="fn p">linkedin-create-post.md</span></div>
           <div class="ftr"><span class="fi">│       ├── </span><span class="fn p">instagram-create-post.md</span></div>
-          <div class="ftr"><span class="fi">│       └── </span><span class="fn p">gmb-create-post.md</span></div>
+          <div class="ftr"><span class="fi">│       ├── </span><span class="fn p">gmb-create-post.md</span></div>
+          <div class="ftr"><span class="fi">│       └── </span><span class="fn p">google-load-business-reviews.md</span></div>
           <div class="ftr"><span class="fi">└── </span><span class="fn d">learnings/</span><span class="fc">compiled after sessions</span></div>
         </div>
       </div>
@@ -960,6 +962,10 @@ ln -s /path/to/aslan-browser/skills/aslan-browser ~/.claude/skills/aslan-browser
             <tr><td>aslan tab:new [url]</td><td>Open new tab, switch to it</td><td></td></tr>
             <tr><td>aslan tab:use &lt;id&gt;</td><td>Switch active tab</td><td></td></tr>
             <tr><td>aslan status</td><td>Connection info</td><td>Must print "Connected"</td></tr>
+            <tr class="grp"><td colspan="3">Learn Mode</td></tr>
+            <tr><td>aslan learn:start &lt;name&gt;</td><td>Start recording user interactions</td><td>name = playbook filename</td></tr>
+            <tr><td>aslan learn:stop [--json]</td><td>Stop recording, print action log</td><td>--json for structured output</td></tr>
+            <tr><td>aslan learn:status</td><td>Check if recording is active</td><td>Prints name + event count</td></tr>
           </tbody>
         </table>
       </div>
@@ -1072,6 +1078,226 @@ ln -s /path/to/aslan-browser/skills/aslan-browser ~/.claude/skills/aslan-browser
 </div>
 
 <script>
+/* ═══════════════════════════════════════════════════════════════
+   CONTENT DATA — Edit this section to update page content
+   ═══════════════════════════════════════════════════════════════ */
+const DATA = {
+  stats: {
+    jsEval: "~0.5ms",
+    screenshot: "~15ms",
+    pythonDeps: "0",
+    linesTotal: "~4.7k"
+  },
+  arch: {
+    sdk: {
+      t: 'Python SDK — aslan_browser',
+      b: 'Sync (<code class="ic">AslanBrowser</code>) and async (<code class="ic">AsyncAslanBrowser</code>) clients. Connects to <code class="ic">/tmp/aslan-browser.sock</code> over a Unix domain socket. Wraps the JSON-RPC protocol into ergonomic method calls. Zero external dependencies — only Python stdlib. Under 300 lines total. Any language can implement a client: just write NDJSON JSON-RPC 2.0 over the socket.',
+    },
+    socket: {
+      t: 'SocketServer — SwiftNIO',
+      b: 'Listens on a Unix domain socket at <code class="ic">/tmp/aslan-browser.sock</code>. Unix sockets are ~30% faster than TCP for local IPC — no network stack overhead. SwiftNIO handles the async I/O. Each client connection gets a persistent read loop: JSON lines in, JSON lines out. Notifications (page load events, navigation changes) can push out without a request.',
+    },
+    rpc: {
+      t: 'JSONRPCHandler',
+      b: 'Parses each incoming newline-delimited JSON line as a JSON-RPC 2.0 message. Validates <code class="ic">method</code>, <code class="ic">id</code>, and <code class="ic">params</code>. Builds the response envelope — <code class="ic">{"jsonrpc":"2.0","id":1,"result":{}}</code> on success, <code class="ic">{"error":{}}</code> on failure. Handles batch requests (an array of calls in one line for parallel execution).',
+    },
+    router: {
+      t: 'MethodRouter',
+      b: 'A switch on method name strings. Maps <code class="ic">"navigate"</code> → <code class="ic">tab.navigate()</code>, <code class="ic">"getAccessibilityTree"</code> → <code class="ic">tab.getA11yTree()</code>, <code class="ic">"screenshot"</code> → <code class="ic">tab.screenshot()</code>, and so on. Reads the optional <code class="ic">tabId</code> param to route to the right tab — defaults to <code class="ic">tab0</code> for single-tab usage.',
+    },
+    tabmgr: {
+      t: 'TabManager',
+      b: 'Owns all BrowserTab instances. Creates/destroys tabs, groups them into sessions, and manages the lifecycle. A session is a named group of tabs — useful when multiple agents run simultaneously. Destroying a session closes all its tabs. Most single-agent scripts just use the default <code class="ic">tab0</code> that\'s created on launch.',
+    },
+    tab: {
+      t: 'BrowserTab — the core unit',
+      b: 'Wraps a <code class="ic">WKWebView</code> inside a hidden <code class="ic">NSWindow</code>. The window must be in the window hierarchy — even hidden — so WKWebView renders normally and JS/WebSockets/CSS animations all work. Handles navigation (with configurable <code class="ic">wait_until</code> states), screenshots (via <code class="ic">WKSnapshotConfiguration</code>), and bridges to ScriptBridge for accessibility tree extraction and interaction. Works alongside <code class="ic">LearnRecorder</code> — when recording is active, BrowserTab routes JS events (click, fill, keydown, scroll, navigation) into the action log.',
+    },
+    bridge: {
+      t: 'ScriptBridge — injected JS',
+      b: 'JavaScript injected into every page that walks the DOM and produces a flat list of interactive/semantic elements: links, buttons, inputs, selects, textareas, ARIA landmarks, headings. Assigns each a stable <code class="ic">@eN</code> ref via <code class="ic">data-agent-ref</code> attributes. Names resolved from <code class="ic">aria-label</code> → <code class="ic">aria-labelledby</code> → <code class="ic">&lt;label&gt;</code> → placeholder → title → visible text. Bounding rects included for spatial reasoning. Handles JS-level click/fill/keypress for reliable interaction.',
+    },
+    web: {
+      t: 'The Web',
+      b: 'WKWebView renders real web pages with full JavaScript support, WebSocket support, CSS animations, iframes, and modern web APIs. It uses the same engine as Safari. No content restrictions — anything a regular Safari user can visit, Aslan can too. The <code class="ic">--hidden</code> flag makes the NSWindow invisible to the user while keeping it in the rendering hierarchy.',
+    },
+  },
+  pages: {
+    login: {
+      html: `<div class="fake-page">
+        <h2 data-ref="@e0">Sign in to GitHub</h2>
+        <span class="flabel">Username or email address</span>
+        <input data-ref="@e1" type="text" placeholder="Username or email address">
+        <span class="flabel">Password</span>
+        <input data-ref="@e2" type="password" placeholder="Password">
+        <div style="margin-top:12px">
+          <button data-ref="@e3">Sign in</button>
+        </div>
+        <div style="margin-top:10px">
+          <a data-ref="@e4" href="#">Forgot password?</a>
+          <a data-ref="@e5" href="#">Create an account</a>
+        </div>
+      </div>`,
+      tree: [
+        { ref:'@e0', role:'heading',  name:'Sign in to GitHub' },
+        { ref:'@e1', role:'textbox',  name:'Username or email address' },
+        { ref:'@e2', role:'textbox',  name:'Password' },
+        { ref:'@e3', role:'button',   name:'Sign in' },
+        { ref:'@e4', role:'link',     name:'Forgot password?' },
+        { ref:'@e5', role:'link',     name:'Create an account' },
+      ]
+    },
+    search: {
+      html: `<div class="fake-page">
+        <h2 data-ref="@e0">Search</h2>
+        <input data-ref="@e1" type="text" placeholder="Search docs, issues, code...">
+        <div style="margin-top:10px">
+          <button data-ref="@e2">Search</button>
+          <button data-ref="@e3" class="sec">Advanced</button>
+        </div>
+        <div style="margin-top:12px">
+          <a data-ref="@e4" href="#">Documentation</a>
+          <a data-ref="@e5" href="#">Blog</a>
+          <a data-ref="@e6" href="#">Community</a>
+          <a data-ref="@e7" href="#">Changelog</a>
+        </div>
+      </div>`,
+      tree: [
+        { ref:'@e0', role:'heading',   name:'Search' },
+        { ref:'@e1', role:'searchbox', name:'Search docs, issues, code...' },
+        { ref:'@e2', role:'button',    name:'Search' },
+        { ref:'@e3', role:'button',    name:'Advanced' },
+        { ref:'@e4', role:'link',      name:'Documentation' },
+        { ref:'@e5', role:'link',      name:'Blog' },
+        { ref:'@e6', role:'link',      name:'Community' },
+        { ref:'@e7', role:'link',      name:'Changelog' },
+      ]
+    },
+    article: {
+      html: `<div class="fake-page">
+        <h2 data-ref="@e0">Getting Started with Aslan Browser</h2>
+        <p data-ref="@e1" style="color:#555;font-size:11px;margin:4px 0 10px">By Irma Gerd · Feb 20, 2026 · 8 min read</p>
+        <p data-ref="@e2" style="color:#333;font-size:12px;margin-bottom:10px;line-height:1.5">A native macOS browser built for AI agents — WKWebView, Unix socket, accessibility tree...</p>
+        <div>
+          <button data-ref="@e3">Share</button>
+          <button data-ref="@e4" class="sec">Bookmark</button>
+        </div>
+        <div style="margin-top:10px">
+          <a data-ref="@e5" href="#">← Back to Blog</a>
+          <a data-ref="@e6" href="#">Next Article →</a>
+        </div>
+      </div>`,
+      tree: [
+        { ref:'@e0', role:'heading',   name:'Getting Started with Aslan Browser' },
+        { ref:'@e1', role:'paragraph', name:'By Irma Gerd · Feb 20, 2026 · 8 min read' },
+        { ref:'@e2', role:'paragraph', name:'A native macOS browser built for AI agents — WKWebView, Unix socket, accessibility tree...' },
+        { ref:'@e3', role:'button',    name:'Share' },
+        { ref:'@e4', role:'button',    name:'Bookmark' },
+        { ref:'@e5', role:'link',      name:'← Back to Blog' },
+        { ref:'@e6', role:'link',      name:'Next Article →' },
+      ]
+    },
+    settings: {
+      html: `<div class="fake-page">
+        <h2 data-ref="@e0">Account Settings</h2>
+        <span class="flabel">Display name</span>
+        <input data-ref="@e1" type="text" placeholder="Display name" value="Irma Gerd">
+        <span class="flabel">Email</span>
+        <input data-ref="@e2" type="email" placeholder="Email address">
+        <span class="flabel">Time zone</span>
+        <select data-ref="@e3" style="width:100%;padding:5px 8px;border:1px solid #d0d7de;border-radius:5px;font-size:12px;margin:3px 0">
+          <option>America/Los_Angeles</option>
+        </select>
+        <div style="margin-top:12px">
+          <button data-ref="@e4">Save changes</button>
+          <button data-ref="@e5" class="sec">Cancel</button>
+        </div>
+      </div>`,
+      tree: [
+        { ref:'@e0', role:'heading',  name:'Account Settings' },
+        { ref:'@e1', role:'textbox',  name:'Display name' },
+        { ref:'@e2', role:'textbox',  name:'Email address' },
+        { ref:'@e3', role:'combobox', name:'Time zone' },
+        { ref:'@e4', role:'button',   name:'Save changes' },
+        { ref:'@e5', role:'button',   name:'Cancel' },
+      ]
+    }
+  },
+  api: {
+    navigation: {
+      lbl: 'Navigation',
+      methods: [
+        { n:'navigate',          a:'url, wait_until="idle"',    d:'Navigate to a URL. wait_until: "none" (fire-and-forget), "load" (DOMContentLoaded), "idle" (network quiet). Use "idle" for SPAs.', ex:'browser.navigate("https://github.com/login", wait_until="idle")' },
+        { n:'go_back',           a:'',                          d:'Navigate to the previous URL in tab history.',                                                                                      ex:'browser.go_back()' },
+        { n:'go_forward',        a:'',                          d:'Navigate forward in tab history.',                                                                                                 ex:'browser.go_forward()' },
+        { n:'reload',            a:'',                          d:'Reload the current page.',                                                                                                         ex:'browser.reload()' },
+        { n:'wait_for_selector', a:'selector, timeout=5000',    d:'Wait for a CSS selector to appear in the DOM. Useful after clicks that trigger dynamic content.',                                  ex:'browser.wait_for_selector(".results-list", timeout=3000)' },
+      ]
+    },
+    page: {
+      lbl: 'Page Info',
+      methods: [
+        { n:'get_title',  a:'',              d:'Return the current page title as a string.',                                                                        ex:'title = browser.get_title()  # "GitHub · Login"' },
+        { n:'get_url',    a:'',              d:'Return the current URL.',                                                                                           ex:'url = browser.get_url()  # "https://github.com/login"' },
+        { n:'evaluate',   a:'script, args={}', d:'Execute JavaScript and return the result. Pass args as a dict — they become local variables in the script. Return value must be JSON-serializable.', ex:'count = browser.evaluate("return document.querySelectorAll(\'a\').length")\n\nresult = browser.evaluate(\n    "return document.querySelector(sel).textContent",\n    args={"sel": "h1"}\n)' },
+      ]
+    },
+    tree: {
+      lbl: 'A11y Tree',
+      methods: [
+        { n:'get_accessibility_tree', a:'', d:'Extract the accessibility tree as a flat list of dicts. Each node: {"ref": "@e0", "role": "link", "name": "Sign in", "rect": {"x":10,"y":50,"w":80,"h":24}}. Only interactive and semantic elements are included. This is what you send to the LLM.', ex:'tree = browser.get_accessibility_tree()\nfor node in tree:\n    print(node["ref"], node["role"], node["name"])\n# @e0  link    "Sign in"\n# @e1  textbox "Username"\n# @e2  button  "Submit"' },
+      ]
+    },
+    interact: {
+      lbl: 'Interaction',
+      methods: [
+        { n:'click',    a:'target',             d:'Click an element by @eN ref or CSS selector. Prefer @eN refs — they\'re stable across re-renders.',                           ex:'browser.click("@e2")         # @eN ref (preferred)\nbrowser.click(".submit-btn")     # CSS selector fallback' },
+        { n:'fill',     a:'target, value',       d:'Fill an input field with a value. Clears existing content first. Works with textbox, textarea, searchbox.',                   ex:'browser.fill("@e0", "myusername")\nbrowser.fill("@e1", "hunter2")' },
+        { n:'select',   a:'target, value',       d:'Select an option from a <select> dropdown. value is the option\'s value attribute, not its display text.',                    ex:'browser.select("@e3", "us-west-2")' },
+        { n:'keypress', a:'key, modifiers={}',   d:'Send a keypress. Common keys: "Enter", "Tab", "Escape", "ArrowDown", "ArrowUp". Modifiers: meta, ctrl, shift, alt.',         ex:'browser.keypress("Enter")\nbrowser.keypress("a", modifiers={"meta": True})  # Cmd+A' },
+        { n:'scroll',   a:'x, y, target=None',  d:'Scroll by (x, y) pixels. Without target, scrolls the page. With target (@eN or selector), scrolls that element.',            ex:'browser.scroll(0, 500)          # page down 500px\nbrowser.scroll(0, 200, "@e5")   # scroll inside element' },
+      ]
+    },
+    screenshots: {
+      lbl: 'Screenshots',
+      methods: [
+        { n:'screenshot',      a:'quality=70, width=1440',  d:'Take a screenshot and return JPEG bytes. ~15ms. Send directly to GPT-4V, Claude, Gemini, etc. Default quality 70 balances size and fidelity.',  ex:'jpeg_bytes = browser.screenshot(quality=70)\n# pass bytes directly to your vision model' },
+        { n:'save_screenshot', a:'path, quality=85, width=1440', d:'Take a screenshot and save to a file path. Returns file size in bytes.',                                                                    ex:'size = browser.save_screenshot("page.jpg", quality=85)\nprint(f"Saved {size:,} bytes")' },
+      ]
+    },
+    tabs: {
+      lbl: 'Tabs & Sessions',
+      methods: [
+        { n:'tab_create',       a:'url=None, hidden=True',  d:'Create a new browser tab. Returns tab_id string. Optionally navigate immediately by passing url.', ex:'tab1 = browser.tab_create(url="https://google.com")\ntab2 = browser.tab_create()  # blank tab' },
+        { n:'tab_close',        a:'tab_id',                 d:'Close a tab and release its resources.',                                                            ex:'browser.tab_close(tab1)' },
+        { n:'tab_list',         a:'session_id=None',        d:'List all open tabs as a list of dicts. Optionally filter by session.',                               ex:'tabs = browser.tab_list()\n# [{"tabId":"tab0"}, {"tabId":"tab1"}]' },
+        { n:'session_create',   a:'name',                   d:'Create a named session for grouping tabs. Useful when running multiple agents in parallel.',         ex:'sess = browser.session_create("agent-research")' },
+        { n:'session_destroy',  a:'session_id',             d:'Destroy a session and close all tabs belonging to it.',                                              ex:'browser.session_destroy(sess)' },
+      ]
+    },
+    batch: {
+      lbl: 'Parallel / Batch',
+      methods: [
+        { n:'parallel_navigate',     a:'urls: dict',          d:'Navigate multiple tabs simultaneously in one round-trip. Pass {tab_id: url} dict. All navigations happen concurrently.', ex:'browser.parallel_navigate({\n    tab1: "https://news.ycombinator.com",\n    tab2: "https://reddit.com/r/python",\n})' },
+        { n:'parallel_get_trees',    a:'tab_ids: list',       d:'Get accessibility trees from multiple tabs in a single round-trip. Returns {tab_id: tree} dict.',                         ex:'trees = browser.parallel_get_trees([tab1, tab2])\ntree1 = trees[tab1]' },
+        { n:'parallel_screenshots',  a:'tab_ids: list',       d:'Screenshot multiple tabs in one round-trip. Returns {tab_id: jpeg_bytes} dict.',                                          ex:'shots = browser.parallel_screenshots([tab1, tab2])' },
+        { n:'batch',                 a:'requests: list',      d:'Low-level: execute multiple arbitrary JSON-RPC calls in a single line sent over the socket. Returns list of results.',    ex:'results = browser.batch([\n    {"method": "getTitle", "params": {"tabId": "tab0"}},\n    {"method": "getUrl",   "params": {"tabId": "tab0"}},\n])' },
+      ]
+    },
+    cookies: {
+      lbl: 'Cookies',
+      methods: [
+        { n:'get_cookies', a:'url=None',                                 d:'Get cookies, optionally filtered to a specific URL. Returns list of cookie dicts.',                                                                          ex:'cookies = browser.get_cookies(url="https://example.com")' },
+        { n:'set_cookie',  a:'name, value, domain, path="/", expires=None', d:'Set a cookie. Useful for pre-authenticating before navigating to a page.',                                                                              ex:'browser.set_cookie(\n    name="session",\n    value="abc123",\n    domain=".example.com",\n)\nbrowser.navigate("https://example.com/dashboard")' },
+      ]
+    },
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   APPLICATION STATE & LOGIC
+   ═══════════════════════════════════════════════════════════════ */
+
 /* ── State ──────────────────────────────────────────────────── */
 const S = {
   section:    'overview',
@@ -1082,152 +1308,15 @@ const S = {
 };
 
 /* ── Architecture details ────────────────────────────────────── */
-const ARCH = {
-  sdk: {
-    t: 'Python SDK — aslan_browser',
-    b: 'Sync (<code class="ic">AslanBrowser</code>) and async (<code class="ic">AsyncAslanBrowser</code>) clients. Connects to <code class="ic">/tmp/aslan-browser.sock</code> over a Unix domain socket. Wraps the JSON-RPC protocol into ergonomic method calls. Zero external dependencies — only Python stdlib. Under 300 lines total. Any language can implement a client: just write NDJSON JSON-RPC 2.0 over the socket.',
-  },
-  socket: {
-    t: 'SocketServer — SwiftNIO',
-    b: 'Listens on a Unix domain socket at <code class="ic">/tmp/aslan-browser.sock</code>. Unix sockets are ~30% faster than TCP for local IPC — no network stack overhead. SwiftNIO handles the async I/O. Each client connection gets a persistent read loop: JSON lines in, JSON lines out. Notifications (page load events, navigation changes) can push out without a request.',
-  },
-  rpc: {
-    t: 'JSONRPCHandler',
-    b: 'Parses each incoming newline-delimited JSON line as a JSON-RPC 2.0 message. Validates <code class="ic">method</code>, <code class="ic">id</code>, and <code class="ic">params</code>. Builds the response envelope — <code class="ic">{"jsonrpc":"2.0","id":1,"result":{}}</code> on success, <code class="ic">{"error":{}}</code> on failure. Handles batch requests (an array of calls in one line for parallel execution).',
-  },
-  router: {
-    t: 'MethodRouter',
-    b: 'A switch on method name strings. Maps <code class="ic">"navigate"</code> → <code class="ic">tab.navigate()</code>, <code class="ic">"getAccessibilityTree"</code> → <code class="ic">tab.getA11yTree()</code>, <code class="ic">"screenshot"</code> → <code class="ic">tab.screenshot()</code>, and so on. Reads the optional <code class="ic">tabId</code> param to route to the right tab — defaults to <code class="ic">tab0</code> for single-tab usage.',
-  },
-  tabmgr: {
-    t: 'TabManager',
-    b: 'Owns all BrowserTab instances. Creates/destroys tabs, groups them into sessions, and manages the lifecycle. A session is a named group of tabs — useful when multiple agents run simultaneously. Destroying a session closes all its tabs. Most single-agent scripts just use the default <code class="ic">tab0</code> that\'s created on launch.',
-  },
-  tab: {
-    t: 'BrowserTab — the core unit',
-    b: 'Wraps a <code class="ic">WKWebView</code> inside a hidden <code class="ic">NSWindow</code>. The window must be in the window hierarchy — even hidden — so WKWebView renders normally and JS/WebSockets/CSS animations all work. Handles navigation (with configurable <code class="ic">wait_until</code> states), screenshots (via <code class="ic">WKSnapshotConfiguration</code>), and bridges to ScriptBridge for accessibility tree extraction and interaction.',
-  },
-  bridge: {
-    t: 'ScriptBridge — injected JS',
-    b: 'JavaScript injected into every page that walks the DOM and produces a flat list of interactive/semantic elements: links, buttons, inputs, selects, textareas, ARIA landmarks, headings. Assigns each a stable <code class="ic">@eN</code> ref via <code class="ic">data-agent-ref</code> attributes. Names resolved from <code class="ic">aria-label</code> → <code class="ic">aria-labelledby</code> → <code class="ic">&lt;label&gt;</code> → placeholder → title → visible text. Bounding rects included for spatial reasoning. Handles JS-level click/fill/keypress for reliable interaction.',
-  },
-  web: {
-    t: 'The Web',
-    b: 'WKWebView renders real web pages with full JavaScript support, WebSocket support, CSS animations, iframes, and modern web APIs. It uses the same engine as Safari. No content restrictions — anything a regular Safari user can visit, Aslan can too. The <code class="ic">--hidden</code> flag makes the NSWindow invisible to the user while keeping it in the rendering hierarchy.',
-  },
-};
-
 function archDetail(key) {
   S.archNode = key;
-  const d = ARCH[key];
+  const d = DATA.arch[key];
   document.getElementById('arch-detail').innerHTML =
     `<h3>${d.t}</h3><p>${d.b}</p>`;
   updatePrompt();
 }
 
 /* ── A11y pages ────────────────────────────────────────────── */
-const PAGES = {
-  login: {
-    html: `<div class="fake-page">
-      <h2 data-ref="@e0">Sign in to GitHub</h2>
-      <span class="flabel">Username or email address</span>
-      <input data-ref="@e1" type="text" placeholder="Username or email address">
-      <span class="flabel">Password</span>
-      <input data-ref="@e2" type="password" placeholder="Password">
-      <div style="margin-top:12px">
-        <button data-ref="@e3">Sign in</button>
-      </div>
-      <div style="margin-top:10px">
-        <a data-ref="@e4" href="#">Forgot password?</a>
-        <a data-ref="@e5" href="#">Create an account</a>
-      </div>
-    </div>`,
-    tree: [
-      { ref:'@e0', role:'heading',  name:'Sign in to GitHub' },
-      { ref:'@e1', role:'textbox',  name:'Username or email address' },
-      { ref:'@e2', role:'textbox',  name:'Password' },
-      { ref:'@e3', role:'button',   name:'Sign in' },
-      { ref:'@e4', role:'link',     name:'Forgot password?' },
-      { ref:'@e5', role:'link',     name:'Create an account' },
-    ]
-  },
-  search: {
-    html: `<div class="fake-page">
-      <h2 data-ref="@e0">Search</h2>
-      <input data-ref="@e1" type="text" placeholder="Search docs, issues, code...">
-      <div style="margin-top:10px">
-        <button data-ref="@e2">Search</button>
-        <button data-ref="@e3" class="sec">Advanced</button>
-      </div>
-      <div style="margin-top:12px">
-        <a data-ref="@e4" href="#">Documentation</a>
-        <a data-ref="@e5" href="#">Blog</a>
-        <a data-ref="@e6" href="#">Community</a>
-        <a data-ref="@e7" href="#">Changelog</a>
-      </div>
-    </div>`,
-    tree: [
-      { ref:'@e0', role:'heading',   name:'Search' },
-      { ref:'@e1', role:'searchbox', name:'Search docs, issues, code...' },
-      { ref:'@e2', role:'button',    name:'Search' },
-      { ref:'@e3', role:'button',    name:'Advanced' },
-      { ref:'@e4', role:'link',      name:'Documentation' },
-      { ref:'@e5', role:'link',      name:'Blog' },
-      { ref:'@e6', role:'link',      name:'Community' },
-      { ref:'@e7', role:'link',      name:'Changelog' },
-    ]
-  },
-  article: {
-    html: `<div class="fake-page">
-      <h2 data-ref="@e0">Getting Started with Aslan Browser</h2>
-      <p data-ref="@e1" style="color:#555;font-size:11px;margin:4px 0 10px">By Irma Gerd · Feb 20, 2026 · 8 min read</p>
-      <p data-ref="@e2" style="color:#333;font-size:12px;margin-bottom:10px;line-height:1.5">A native macOS browser built for AI agents — WKWebView, Unix socket, accessibility tree...</p>
-      <div>
-        <button data-ref="@e3">Share</button>
-        <button data-ref="@e4" class="sec">Bookmark</button>
-      </div>
-      <div style="margin-top:10px">
-        <a data-ref="@e5" href="#">← Back to Blog</a>
-        <a data-ref="@e6" href="#">Next Article →</a>
-      </div>
-    </div>`,
-    tree: [
-      { ref:'@e0', role:'heading',   name:'Getting Started with Aslan Browser' },
-      { ref:'@e1', role:'paragraph', name:'By Irma Gerd · Feb 20, 2026 · 8 min read' },
-      { ref:'@e2', role:'paragraph', name:'A native macOS browser built for AI agents — WKWebView, Unix socket, accessibility tree...' },
-      { ref:'@e3', role:'button',    name:'Share' },
-      { ref:'@e4', role:'button',    name:'Bookmark' },
-      { ref:'@e5', role:'link',      name:'← Back to Blog' },
-      { ref:'@e6', role:'link',      name:'Next Article →' },
-    ]
-  },
-  settings: {
-    html: `<div class="fake-page">
-      <h2 data-ref="@e0">Account Settings</h2>
-      <span class="flabel">Display name</span>
-      <input data-ref="@e1" type="text" placeholder="Display name" value="Irma Gerd">
-      <span class="flabel">Email</span>
-      <input data-ref="@e2" type="email" placeholder="Email address">
-      <span class="flabel">Time zone</span>
-      <select data-ref="@e3" style="width:100%;padding:5px 8px;border:1px solid #d0d7de;border-radius:5px;font-size:12px;margin:3px 0">
-        <option>America/Los_Angeles</option>
-      </select>
-      <div style="margin-top:12px">
-        <button data-ref="@e4">Save changes</button>
-        <button data-ref="@e5" class="sec">Cancel</button>
-      </div>
-    </div>`,
-    tree: [
-      { ref:'@e0', role:'heading',  name:'Account Settings' },
-      { ref:'@e1', role:'textbox',  name:'Display name' },
-      { ref:'@e2', role:'textbox',  name:'Email address' },
-      { ref:'@e3', role:'combobox', name:'Time zone' },
-      { ref:'@e4', role:'button',   name:'Save changes' },
-      { ref:'@e5', role:'button',   name:'Cancel' },
-    ]
-  }
-};
-
 function a11yPage(key, btn) {
   S.a11yPage = key;
   document.querySelectorAll('.ptab').forEach(b => b.classList.remove('on'));
@@ -1237,7 +1326,7 @@ function a11yPage(key, btn) {
 }
 
 function renderA11y() {
-  const p = PAGES[S.a11yPage];
+  const p = DATA.pages[S.a11yPage];
   document.getElementById('fake-page').innerHTML = p.html;
   document.getElementById('tree-out').innerHTML = p.tree.map((n,i) =>
     `<div class="tnode" data-i="${i}" onmouseenter="hlNode(${i})" onmouseleave="clearHl()">
@@ -1247,7 +1336,7 @@ function renderA11y() {
 }
 
 function hlNode(i) {
-  const ref = PAGES[S.a11yPage].tree[i].ref;
+  const ref = DATA.pages[S.a11yPage].tree[i].ref;
   document.querySelectorAll('.tnode').forEach((el,j) => el.classList.toggle('hl', i===j));
   document.querySelectorAll('#fake-page [data-ref]').forEach(el => {
     const hit = el.dataset.ref === ref;
@@ -1264,87 +1353,17 @@ function clearHl() {
 }
 
 /* ── API data ────────────────────────────────────────────────── */
-const API = {
-  navigation: {
-    lbl: 'Navigation',
-    methods: [
-      { n:'navigate',          a:'url, wait_until="idle"',    d:'Navigate to a URL. wait_until: "none" (fire-and-forget), "load" (DOMContentLoaded), "idle" (network quiet). Use "idle" for SPAs.', ex:'browser.navigate("https://github.com/login", wait_until="idle")' },
-      { n:'go_back',           a:'',                          d:'Navigate to the previous URL in tab history.',                                                                                      ex:'browser.go_back()' },
-      { n:'go_forward',        a:'',                          d:'Navigate forward in tab history.',                                                                                                 ex:'browser.go_forward()' },
-      { n:'reload',            a:'',                          d:'Reload the current page.',                                                                                                         ex:'browser.reload()' },
-      { n:'wait_for_selector', a:'selector, timeout=5000',    d:'Wait for a CSS selector to appear in the DOM. Useful after clicks that trigger dynamic content.',                                  ex:'browser.wait_for_selector(".results-list", timeout=3000)' },
-    ]
-  },
-  page: {
-    lbl: 'Page Info',
-    methods: [
-      { n:'get_title',  a:'',              d:'Return the current page title as a string.',                                                                        ex:'title = browser.get_title()  # "GitHub · Login"' },
-      { n:'get_url',    a:'',              d:'Return the current URL.',                                                                                           ex:'url = browser.get_url()  # "https://github.com/login"' },
-      { n:'evaluate',   a:'script, args={}', d:'Execute JavaScript and return the result. Pass args as a dict — they become local variables in the script. Return value must be JSON-serializable.', ex:'count = browser.evaluate("return document.querySelectorAll(\'a\').length")\n\nresult = browser.evaluate(\n    "return document.querySelector(sel).textContent",\n    args={"sel": "h1"}\n)' },
-    ]
-  },
-  tree: {
-    lbl: 'A11y Tree',
-    methods: [
-      { n:'get_accessibility_tree', a:'', d:'Extract the accessibility tree as a flat list of dicts. Each node: {"ref": "@e0", "role": "link", "name": "Sign in", "rect": {"x":10,"y":50,"w":80,"h":24}}. Only interactive and semantic elements are included. This is what you send to the LLM.', ex:'tree = browser.get_accessibility_tree()\nfor node in tree:\n    print(node["ref"], node["role"], node["name"])\n# @e0  link    "Sign in"\n# @e1  textbox "Username"\n# @e2  button  "Submit"' },
-    ]
-  },
-  interact: {
-    lbl: 'Interaction',
-    methods: [
-      { n:'click',    a:'target',             d:'Click an element by @eN ref or CSS selector. Prefer @eN refs — they\'re stable across re-renders.',                           ex:'browser.click("@e2")         # @eN ref (preferred)\nbrowser.click(".submit-btn")     # CSS selector fallback' },
-      { n:'fill',     a:'target, value',       d:'Fill an input field with a value. Clears existing content first. Works with textbox, textarea, searchbox.',                   ex:'browser.fill("@e0", "myusername")\nbrowser.fill("@e1", "hunter2")' },
-      { n:'select',   a:'target, value',       d:'Select an option from a <select> dropdown. value is the option\'s value attribute, not its display text.',                    ex:'browser.select("@e3", "us-west-2")' },
-      { n:'keypress', a:'key, modifiers={}',   d:'Send a keypress. Common keys: "Enter", "Tab", "Escape", "ArrowDown", "ArrowUp". Modifiers: meta, ctrl, shift, alt.',         ex:'browser.keypress("Enter")\nbrowser.keypress("a", modifiers={"meta": True})  # Cmd+A' },
-      { n:'scroll',   a:'x, y, target=None',  d:'Scroll by (x, y) pixels. Without target, scrolls the page. With target (@eN or selector), scrolls that element.',            ex:'browser.scroll(0, 500)          # page down 500px\nbrowser.scroll(0, 200, "@e5")   # scroll inside element' },
-    ]
-  },
-  screenshots: {
-    lbl: 'Screenshots',
-    methods: [
-      { n:'screenshot',      a:'quality=70, width=1440',  d:'Take a screenshot and return JPEG bytes. ~15ms. Send directly to GPT-4V, Claude, Gemini, etc. Default quality 70 balances size and fidelity.',  ex:'jpeg_bytes = browser.screenshot(quality=70)\n# pass bytes directly to your vision model' },
-      { n:'save_screenshot', a:'path, quality=85, width=1440', d:'Take a screenshot and save to a file path. Returns file size in bytes.',                                                                    ex:'size = browser.save_screenshot("page.jpg", quality=85)\nprint(f"Saved {size:,} bytes")' },
-    ]
-  },
-  tabs: {
-    lbl: 'Tabs & Sessions',
-    methods: [
-      { n:'tab_create',       a:'url=None, hidden=True',  d:'Create a new browser tab. Returns tab_id string. Optionally navigate immediately by passing url.', ex:'tab1 = browser.tab_create(url="https://google.com")\ntab2 = browser.tab_create()  # blank tab' },
-      { n:'tab_close',        a:'tab_id',                 d:'Close a tab and release its resources.',                                                            ex:'browser.tab_close(tab1)' },
-      { n:'tab_list',         a:'session_id=None',        d:'List all open tabs as a list of dicts. Optionally filter by session.',                               ex:'tabs = browser.tab_list()\n# [{"tabId":"tab0"}, {"tabId":"tab1"}]' },
-      { n:'session_create',   a:'name',                   d:'Create a named session for grouping tabs. Useful when running multiple agents in parallel.',         ex:'sess = browser.session_create("agent-research")' },
-      { n:'session_destroy',  a:'session_id',             d:'Destroy a session and close all tabs belonging to it.',                                              ex:'browser.session_destroy(sess)' },
-    ]
-  },
-  batch: {
-    lbl: 'Parallel / Batch',
-    methods: [
-      { n:'parallel_navigate',     a:'urls: dict',          d:'Navigate multiple tabs simultaneously in one round-trip. Pass {tab_id: url} dict. All navigations happen concurrently.', ex:'browser.parallel_navigate({\n    tab1: "https://news.ycombinator.com",\n    tab2: "https://reddit.com/r/python",\n})' },
-      { n:'parallel_get_trees',    a:'tab_ids: list',       d:'Get accessibility trees from multiple tabs in a single round-trip. Returns {tab_id: tree} dict.',                         ex:'trees = browser.parallel_get_trees([tab1, tab2])\ntree1 = trees[tab1]' },
-      { n:'parallel_screenshots',  a:'tab_ids: list',       d:'Screenshot multiple tabs in one round-trip. Returns {tab_id: jpeg_bytes} dict.',                                          ex:'shots = browser.parallel_screenshots([tab1, tab2])' },
-      { n:'batch',                 a:'requests: list',      d:'Low-level: execute multiple arbitrary JSON-RPC calls in a single line sent over the socket. Returns list of results.',    ex:'results = browser.batch([\n    {"method": "getTitle", "params": {"tabId": "tab0"}},\n    {"method": "getUrl",   "params": {"tabId": "tab0"}},\n])' },
-    ]
-  },
-  cookies: {
-    lbl: 'Cookies',
-    methods: [
-      { n:'get_cookies', a:'url=None',                                 d:'Get cookies, optionally filtered to a specific URL. Returns list of cookie dicts.',                                                                          ex:'cookies = browser.get_cookies(url="https://example.com")' },
-      { n:'set_cookie',  a:'name, value, domain, path="/", expires=None', d:'Set a cookie. Useful for pre-authenticating before navigating to a page.',                                                                              ex:'browser.set_cookie(\n    name="session",\n    value="abc123",\n    domain=".example.com",\n)\nbrowser.navigate("https://example.com/dashboard")' },
-    ]
-  },
-};
-
 let selMethod = null;
 
 function renderApiCats() {
   document.getElementById('api-cats').innerHTML =
-    Object.entries(API).map(([k,v]) =>
+    Object.entries(DATA.api).map(([k,v]) =>
       `<div class="api-cat ${k===S.apiCat?'on':''}" onclick="selApiCat('${k}')">${v.lbl}</div>`
     ).join('');
 }
 
 function renderApiMethods() {
-  const cat = API[S.apiCat];
+  const cat = DATA.api[S.apiCat];
   document.getElementById('api-methods').innerHTML =
     cat.methods.map((m,i) =>
       `<div class="api-m" onclick="selApiM(${i})">
@@ -1364,7 +1383,7 @@ function selApiCat(k) {
 }
 
 function selApiM(i) {
-  const m = API[S.apiCat].methods[i];
+  const m = DATA.api[S.apiCat].methods[i];
   selMethod = m;
   const el = document.getElementById('api-detail');
   el.style.display = 'block';
@@ -1400,18 +1419,18 @@ function updatePrompt() {
   const el = document.getElementById('prompt-out');
   let txt = '';
   if (S.section === 'overview') {
-    txt = 'Aslan Browser is a native macOS browser for AI agents. It wraps WKWebView and exposes it via a Unix socket with NDJSON JSON-RPC 2.0. Instead of the full DOM, it returns a compact accessibility tree — 10–100× fewer tokens for the same page. The Python SDK has zero external dependencies (stdlib only). JS eval ~0.5ms, screenshots ~15ms, ~40MB/tab. ~2,600 lines total (Swift + Python).';
+    txt = 'Aslan Browser is a native macOS browser for AI agents. It wraps WKWebView and exposes it via a Unix socket with NDJSON JSON-RPC 2.0. Instead of the full DOM, it returns a compact accessibility tree — 10–100× fewer tokens for the same page. The Python SDK has zero external dependencies (stdlib only). JS eval ~0.5ms, screenshots ~15ms, ~40MB/tab. v1.5.0 (build 7) — ~4,700 lines total (Swift + Python). Learn mode: record user interactions to auto-generate playbooks.';
   } else if (S.section === 'why') {
     txt = 'Safari automation was built for testing websites, not operating them. Four problems: (1) Glass pane — Safari blocks all user clicks during automation, Aslan lets you co-browse. (2) Forced private mode — Safari wipes cookies every session, Aslan keeps a persistent profile. (3) HTTP vs Unix socket — WebDriver adds 10–50ms per command, Aslan is ~0.5ms. (4) Raw HTML vs accessibility tree — Safari dumps the DOM, Aslan gives the LLM a clean structured list at 10–100x fewer tokens.';
   } else if (S.section === 'architecture') {
     if (S.archNode) {
-      const d = ARCH[S.archNode];
+      const d = DATA.arch[S.archNode];
       txt = `Aslan Browser — ${d.t}: ${d.b.replace(/<[^>]+>/g,'')}`;
     } else {
       txt = 'Aslan Browser architecture: Python SDK ↔ Unix socket ↔ SocketServer (SwiftNIO) → JSONRPCHandler → MethodRouter → TabManager → BrowserTab (WKWebView). ScriptBridge is injected JS that produces the @eN-tagged accessibility tree and handles interactions. Click any component to learn more.';
     }
   } else if (S.section === 'a11y') {
-    const p = PAGES[S.a11yPage];
+    const p = DATA.pages[S.a11yPage];
     txt = `Accessibility tree demo — "${S.a11yPage}" page: ${p.tree.length} nodes extracted. ` +
       p.tree.map(n => `${n.ref} ${n.role} "${n.name}"`).join(' · ') +
       '. The agent uses @eN refs with click() and fill() instead of working with raw DOM. Nodes include role, name (resolved from aria-label → label → placeholder → text), and bounding rect.';
@@ -1419,15 +1438,15 @@ function updatePrompt() {
     if (selMethod) {
       txt = `Aslan Browser SDK — browser.${selMethod.n}(${selMethod.a}): ${selMethod.d}`;
     } else {
-      const cat = API[S.apiCat];
+      const cat = DATA.api[S.apiCat];
       txt = `Aslan Browser SDK — ${cat.lbl.replace(/^.+ /,'')} methods: ${cat.methods.map(m=>`browser.${m.n}()`).join(', ')}.`;
     }
   } else if (S.section === 'compare') {
     txt = 'Aslan vs Playwright/Puppeteer/Selenium: Aslan uses WKWebView (no 500MB Chrome download), returns an accessibility tree instead of raw DOM (10–100× fewer tokens), JS eval ~0.5ms vs 2–5ms, screenshots ~15ms vs 50–150ms, ~40MB/tab vs 80–150MB, cold start <500ms vs 2–5s. Python SDK is zero-dependency (stdlib only). Trade-off: macOS 14+ only. Built specifically for the AI agent use case with a built-in Prompts-are-Code skill.';
   } else if (S.section === 'skill') {
     if (skillTabKey === 'flow')  txt = 'Aslan Browser skill — session lifecycle: Setup (load SDK_REFERENCE.md + core.md + user.md + site file if relevant, verify aslan status) → OARC loop (Orient: aslan tabs/url/title · Act: ONE command · Read: aslan tree · Decide: loop or compile) → Compile (route discoveries to core.md / sites/{domain}.md / playbooks/ / user.md).';
-    if (skillTabKey === 'files') txt = 'Skill file map: SKILL.md (protocol, loaded every invocation) · SDK_REFERENCE.md (CLI reference, loaded every session) · knowledge/core.md (universal rules, always loaded) · knowledge/user.md (user prefs, gitignored) · knowledge/sites/{domain}.md (8 site guides, loaded on demand) · knowledge/playbooks/ (3 task playbooks) · learnings/.';
-    if (skillTabKey === 'cmds')  txt = 'Key aslan CLI commands: nav <url> --wait idle · tree (accessibility tree, @eN refs) · text / title / url · eval "return ..." (return required) · click @eN · fill @eN <val> (inputs only) · type @eN <val> (works on contenteditable) · key Enter · scroll · wait --idle · upload <file> · shot [path] · tab:new / tab:use / tabs · status.';
+    if (skillTabKey === 'files') txt = 'Skill file map: SKILL.md (protocol, loaded every invocation) · SDK_REFERENCE.md (CLI reference, loaded every session) · knowledge/core.md (universal rules, always loaded) · knowledge/user.md (user prefs, gitignored) · knowledge/sites/{domain}.md (9 site guides: linkedin, instagram, facebook, google, business.google.com, reddit, hubspot, app.hubspot, openrouter — loaded on demand) · knowledge/playbooks/ (4 task playbooks incl. google-load-business-reviews) · learnings/.';
+    if (skillTabKey === 'cmds')  txt = 'Key aslan CLI commands: nav <url> --wait idle · tree (accessibility tree, @eN refs) · text / title / url · eval "return ..." (return required) · click @eN · fill @eN <val> (inputs only) · type @eN <val> (works on contenteditable) · key Enter · scroll · wait --idle · upload <file> · shot [path] · tab:new / tab:use / tabs · status · learn:start <name> / learn:stop [--json] / learn:status (learn mode — record user interactions to generate playbooks).';
     if (skillTabKey === 'donts') txt = "Aslan skill explicit rules: use aslan CLI not Python SDK · act one step then read — never pre-plan multi-step scripts · aslan eval needs return · use aslan type not fill on contenteditable · always https:// never http:// · @eN refs are ephemeral — read tree immediately before acting · compile knowledge after every task.";
   } else if (S.section === 'quickstart') {
     txt = 'Aslan Browser quickstart (5 steps): 1) Build with Xcode or download pre-built binary from GitHub Releases. 2) pip install -e sdk/python (zero external deps). 3) Start the app with --hidden flag — listens on /tmp/aslan-browser.sock. 4) Use AslanBrowser() context manager: navigate() → get_accessibility_tree() → click/@eN refs → screenshot(). 5) Optionally symlink the bundled AI skill into your agent\'s skill directory.';
@@ -1475,6 +1494,12 @@ document.addEventListener('keydown', e => {
 });
 
 /* ── Init ─────────────────────────────────────────────────────── */
+function populateStats() {
+  document.getElementById('stat-js').textContent        = DATA.stats.jsEval;
+  document.getElementById('stat-screenshot').textContent = DATA.stats.screenshot;
+  document.getElementById('stat-deps').textContent       = DATA.stats.pythonDeps;
+  document.getElementById('stat-lines').textContent      = DATA.stats.linesTotal;
+}
 
 
 /* ── Skill tabs ─────────────────────────────────────────────── */
@@ -1490,6 +1515,7 @@ function skillTab(key, btn) {
 }
 
 
+populateStats();
 renderA11y();
 renderApiCats();
 renderApiMethods();
