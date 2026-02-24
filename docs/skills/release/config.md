@@ -12,6 +12,7 @@
 | `aslan-browser.xcodeproj/project.pbxproj` | `MARKETING_VERSION = X.Y.Z;` (multiple occurrences) | App version displayed in About panel and GitHub releases |
 | `aslan-browser.xcodeproj/project.pbxproj` | `CURRENT_PROJECT_VERSION = N;` (multiple occurrences) | Build number — increment by 1 each release |
 | `sdk/python/pyproject.toml` | `version = "X.Y.Z"` | Python SDK version |
+| `sdk/python/aslan_browser/__init__.py` | `__version__ = "X.Y.Z"` | Python SDK runtime version (read by CLI --version) |
 
 ## Version Sync Rules
 
