@@ -1,0 +1,18 @@
+# Tests
+tests/
+aslan-browserTests/
+aslan-browserUITests/
+sdk/python/tests/
+benchmarks/
+
+# Duplicated/stale SDK copy
+sdk/sdk/
+
+# Build artifacts & caches
+*.app
+*.xcodeproj
+.serena/cache/
+
+# Stray/junk files at root
+*.sync-conflict-*
+ab.py
