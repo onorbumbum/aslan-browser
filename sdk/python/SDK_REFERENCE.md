@@ -44,10 +44,16 @@ b.tab_close(tab)
 # Create a session (groups tabs for bulk cleanup) → returns session ID
 sid = b.session_create(name="research")
 
+# Get/create a named session (safe for multiple agents) → returns session ID
+sid = b.session_get_or_create("agent-scout")
+
+# List sessions → [{"sessionId": "s0", "name": "agent-scout", "tabCount": 2}, ...]
+sessions = b.session_list()
+
 # List tabs in a session
 tabs = b.tab_list(session_id=sid)
 
-# Destroy session + close all its tabs → returns list of closed tab IDs
+# Destroy session by ID or name + close all its tabs → returns list of closed tab IDs
 closed = b.session_destroy(sid)
 ```
 
@@ -135,6 +141,12 @@ jpeg_bytes = b.screenshot(tab_id=tab, quality=70, width=1440)
 
 # Save screenshot directly to file → returns file size in bytes
 size = b.save_screenshot("/tmp/page.jpg", tab_id=tab, quality=70, width=1440)
+
+# Resize the tab to a viewport and capture 1:1 (PNG or JPEG)
+png = b.screenshot(tab_id=tab, format="png", viewport_width=1280, viewport_height=800)
+
+# Whole page at 1280 wide (height from the page; cannot combine with viewport_height)
+png = b.screenshot(tab_id=tab, format="png", viewport_width=1280, full_page=True)
 ```
 
 ---

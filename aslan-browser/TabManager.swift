@@ -41,6 +41,31 @@ class TabManager {
         return sessionId
     }
 
+    func getOrCreateSession(name: String) -> String {
+        if let existing = sessions.values.first(where: { $0.name == name }) {
+            return existing.sessionId
+        }
+        return createSession(name: name)
+    }
+
+    func resolveSessionId(_ idOrName: String) -> String? {
+        if sessions[idOrName] != nil {
+            return idOrName
+        }
+        return sessions.values.first(where: { $0.name == idOrName })?.sessionId
+    }
+
+    func listSessions() -> [[String: Any]] {
+        sessions.values.sorted { $0.sessionId < $1.sessionId }.map { session in
+            let tabCount = tabs.values.filter { $0.sessionId == session.sessionId }.count
+            return [
+                "sessionId": session.sessionId,
+                "name": session.name,
+                "tabCount": tabCount
+            ]
+        }
+    }
+
     func destroySession(id: String) throws -> [String] {
         guard sessions.removeValue(forKey: id) != nil else {
             throw BrowserError.sessionNotFound(id)
@@ -153,7 +178,9 @@ class TabManager {
             TabInfo(
                 tabId: id,
                 url: tab.webView.url?.absoluteString ?? "",
-                title: tab.webView.title ?? ""
+                title: tab.webView.title ?? "",
+                sessionId: tab.sessionId,
+                sessionName: tab.sessionId.flatMap { sessions[$0]?.name }
             )
         }.sorted { $0.tabId < $1.tabId }
     }

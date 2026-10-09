@@ -8,7 +8,7 @@ import json
 import os
 from typing import Any, Callable, Optional
 
-from aslan_browser.client import AslanBrowserError
+from aslan_browser.client import AslanBrowserError, _screenshot_bytes, _screenshot_params
 
 
 _DEFAULT_SOCKET = "/tmp/aslan-browser.sock"
@@ -316,13 +316,21 @@ class AsyncAslanBrowser:
     # ── screenshots ──────────────────────────────────────────────────
 
     async def screenshot(
-        self, tab_id: str = "tab0", quality: int = 70, width: int = 1440
+        self,
+        tab_id: str = "tab0",
+        quality: int = 70,
+        width: int = 1440,
+        *,
+        format: str = "jpeg",
+        viewport_width: Optional[int] = None,
+        viewport_height: Optional[int] = None,
+        full_page: bool = False,
     ) -> bytes:
-        """Take a screenshot. Returns JPEG bytes."""
-        result = await self._call(
-            "screenshot", {"tabId": tab_id, "quality": quality, "width": width}
+        """Take a screenshot. Returns JPEG (default) or PNG bytes. See AslanBrowser.screenshot."""
+        params = _screenshot_params(
+            tab_id, quality, width, format, viewport_width, viewport_height, full_page
         )
-        return base64.b64decode(result["data"])
+        return _screenshot_bytes(await self._call("screenshot", params), params)
 
     async def save_screenshot(
         self,
@@ -330,9 +338,18 @@ class AsyncAslanBrowser:
         tab_id: str = "tab0",
         quality: int = 70,
         width: int = 1440,
+        *,
+        format: str = "jpeg",
+        viewport_width: Optional[int] = None,
+        viewport_height: Optional[int] = None,
+        full_page: bool = False,
     ) -> int:
         """Take a screenshot and save to a file. Returns file size in bytes."""
-        data = await self.screenshot(tab_id=tab_id, quality=quality, width=width)
+        data = await self.screenshot(
+            tab_id=tab_id, quality=quality, width=width, format=format,
+            viewport_width=viewport_width, viewport_height=viewport_height,
+            full_page=full_page,
+        )
         with open(path, "wb") as f:
             f.write(data)
         return len(data)
@@ -426,8 +443,18 @@ class AsyncAslanBrowser:
         result = await self._call("session.create", params)
         return result["sessionId"]
 
+    async def session_get_or_create(self, name: str) -> str:
+        """Return the existing session with this name, or create it."""
+        result = await self._call("session.use", {"name": name})
+        return result["sessionId"]
+
+    async def session_list(self) -> list[dict]:
+        """List open sessions."""
+        result = await self._call("session.list")
+        return result.get("sessions", [])
+
     async def session_destroy(self, session_id: str) -> list[str]:
-        """Destroy a session and close all its tabs. Returns closed tab IDs."""
+        """Destroy a session by ID or name and close all its tabs. Returns closed tab IDs."""
         result = await self._call("session.destroy", {"sessionId": session_id})
         closed = result.get("closedTabs", [])
         # Remove closed tabs from local tracking

@@ -38,6 +38,9 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
     /// Navigation delegates for popup webviews (must be retained)
     private var popupNavDelegates: [PopupNavigationDelegate] = []
 
+    /// If set, the next file-input open panel returns these URLs without showing UI.
+    private var queuedOpenPanelURLs: [URL]?
+
     // Event callback: (method, params) — set by TabManager
     var onEvent: ((_ method: String, _ params: [String: Any]) -> Void)?
 
@@ -67,6 +70,11 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         let frame = NSRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height))
 
         let wv = WKWebView(frame: frame, configuration: config)
+        // Bare WKWebView omits Safari's version, which can trigger basic site UIs.
+        // Match the installed Safari version rather than claiming to run Chromium.
+        let safariVersion = Bundle(path: "/Applications/Safari.app")?
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "17.0"
+        wv.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/\(safariVersion) Safari/605.1.15"
         self.webView = wv
 
         let win = NSWindow(
@@ -548,6 +556,19 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         }
     }
 
+    func uploadFileViaOpenPanel(target: String, paths: [String]) async throws -> [String: Any] {
+        let urls = paths.map { URL(fileURLWithPath: $0) }
+        queuedOpenPanelURLs = urls
+        do {
+            try await click(target: target)
+            try await Task.sleep(nanoseconds: 500_000_000)
+            return ["uploaded": urls.map { $0.path }]
+        } catch {
+            queuedOpenPanelURLs = nil
+            throw error
+        }
+    }
+
     func fill(target: String, value: String) async throws {
         let selector = resolveSelector(target)
         let script = """
@@ -721,31 +742,260 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
 
     // MARK: - Screenshot
 
+    /// Tallest full-page capture; WKWebView snapshots fail past GPU texture limits.
+    static let maxFullPageHeight = 16384
+
+    /// Without viewport params the snapshot scales the current view to `width` (legacy
+    /// behavior). With `viewportWidth`/`viewportHeight` the view is resized to that
+    /// CSS-pixel viewport first and captured 1:1. `fullPage` scrolls the document in
+    /// viewport-sized slices and stitches them, so `vh` units, lazy images and
+    /// scroll-reveal sections behave as they do for a real visitor. The original size
+    /// is restored afterwards.
     func screenshot(quality: Int = 70, width: Int = 1440) async throws -> String {
+        try await captureScreenshot(quality: quality, width: width).base64
+    }
+
+    func captureScreenshot(
+        quality: Int = 70,
+        width: Int = 1440,
+        format: String = "jpeg",
+        viewportWidth: Int? = nil,
+        viewportHeight: Int? = nil,
+        fullPage: Bool = false
+    ) async throws -> (base64: String, width: Int, height: Int) {
+        let resizing = viewportWidth != nil || viewportHeight != nil || fullPage
+
+        let originalContentSize = window.contentView?.frame.size
+        defer {
+            if resizing, let size = originalContentSize {
+                window.setContentSize(size)
+                window.contentView?.layoutSubtreeIfNeeded()
+            }
+        }
+
+        var cgImage: CGImage
+        if fullPage {
+            let w = viewportWidth ?? Int(webView.frame.width)
+            cgImage = try await captureFullPage(width: w, viewportHeight: Self.fullPageViewportHeight(forWidth: w))
+        } else if resizing {
+            let w = viewportWidth ?? Int(webView.frame.width)
+            let h = viewportHeight ?? Int(webView.frame.height)
+            setViewportSize(width: w, height: h)
+            try await Task.sleep(nanoseconds: 150_000_000)
+            _ = try await evaluate(Self.finishAnimationsJS)
+            _ = try await evaluate(Self.decodeVisibleImagesJS)
+            try await Task.sleep(nanoseconds: 100_000_000)
+            // Snapshots come back at backing-store (Retina) resolution; a requested
+            // viewport means CSS pixels, so output W x H pixels like Playwright.
+            cgImage = try await snapshotImage(width: w, downscaleToCSSPixels: true)
+        } else {
+            cgImage = try await snapshotImage(width: width, downscaleToCSSPixels: false)
+        }
+
+        let pixelSize = (width: cgImage.width, height: cgImage.height)
+        let bitmap = NSBitmapImageRep(cgImage: cgImage)
+        let isPNG = format == "png"
+        let compressionFactor = Double(quality) / 100.0
+
+        // Encode off main thread
+        let base64 = try await Task.detached {
+            guard let data = isPNG
+                ? bitmap.representation(using: .png, properties: [:])
+                : bitmap.representation(using: .jpeg, properties: [.compressionFactor: compressionFactor])
+            else {
+                throw BrowserError.screenshotFailed("Failed to encode \(isPNG ? "PNG" : "JPEG")")
+            }
+            return data.base64EncodedString()
+        }.value
+
+        return (base64, pixelSize.width, pixelSize.height)
+    }
+
+    /// Slice height for full-page capture; sets what `vh` resolves to on the page.
+    private static func fullPageViewportHeight(forWidth width: Int) -> Int {
+        width < 768 ? 844 : 1080
+    }
+
+    private func snapshotImage(width: Int, downscaleToCSSPixels: Bool) async throws -> CGImage {
         let config = WKSnapshotConfiguration()
         config.snapshotWidth = NSNumber(value: width)
-
         let image = try await webView.takeSnapshot(configuration: config)
-
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             throw BrowserError.screenshotFailed("Failed to create CGImage")
         }
+        let scale = window.backingScaleFactor
+        guard downscaleToCSSPixels, scale > 1 else { return cgImage }
+        return try Self.resample(
+            cgImage,
+            toWidth: Int((CGFloat(cgImage.width) / scale).rounded()),
+            height: Int((CGFloat(cgImage.height) / scale).rounded())
+        )
+    }
 
-        let bitmap = NSBitmapImageRep(cgImage: cgImage)
-        let compressionFactor = Double(quality) / 100.0
+    private static let documentHeightJS =
+        "return Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)"
 
-        // Encode JPEG off main thread
-        let base64 = try await Task.detached {
-            guard let jpegData = bitmap.representation(
-                using: .jpeg,
-                properties: [.compressionFactor: compressionFactor]
+    /// Hide fixed elements (and sticky ones near the top, i.e. headers) so they appear only
+    /// in the first slice instead of repeating in every one.
+    private static let hideFixedJS = """
+        if (!window.__aslanHidden) {
+          window.__aslanHidden = [];
+          for (const e of document.querySelectorAll('*')) {
+            const p = getComputedStyle(e).position;
+            const stuckHeader = p === 'sticky' && e.getBoundingClientRect().top < innerHeight * 0.25;
+            if (p !== 'fixed' && !stuckHeader) continue;
+            // Fixed elements are out of flow, so display:none cannot shift layout and also
+            // beats children that force visibility:visible. Sticky ones stay in flow.
+            const prop = p === 'fixed' ? 'display' : 'visibility';
+            const value = p === 'fixed' ? 'none' : 'hidden';
+            window.__aslanHidden.push([e, prop, e.style.getPropertyValue(prop), e.style.getPropertyPriority(prop)]);
+            e.style.setProperty(prop, value, 'important');
+          }
+        }
+        return window.__aslanHidden.length
+        """
+
+    /// Resolve once every image currently in the viewport is decoded, so the snapshot does
+    /// not catch large lazy images before they paint. Bounded so a stuck image cannot hang.
+    private static let decodeVisibleImagesJS = """
+        const imgs = [...document.images].filter(i => {
+          const r = i.getBoundingClientRect();
+          return r.width > 0 && r.bottom > 0 && r.top < innerHeight;
+        });
+        const decodes = Promise.all(imgs.map(i => i.decode().catch(() => {})));
+        const timeout = new Promise(resolve => setTimeout(resolve, 4000));
+        await Promise.race([decodes, timeout]);
+        return imgs.length
+        """
+
+    /// Hidden windows do not advance CSS animations or transitions, so fade-ins (e.g.
+    /// `img { opacity: 0; animation: fadeIn }`) would be captured at their start state.
+    /// Jump finite ones to their end; infinite animations throw and are left alone.
+    private static let finishAnimationsJS = """
+        let finished = 0;
+        for (const a of document.getAnimations()) {
+          try { a.finish(); finished++ } catch (e) {}
+        }
+        return finished
+        """
+
+    private static let restoreFixedJS = """
+        if (window.__aslanHidden) {
+          for (const [e, prop, v, pr] of window.__aslanHidden) {
+            if (v) e.style.setProperty(prop, v, pr); else e.style.removeProperty(prop);
+          }
+          delete window.__aslanHidden;
+        }
+        return true
+        """
+
+    private func intResult(_ script: String, args: [String: Any]? = nil) async throws -> Int {
+        (try await evaluate(script, args: args) as? NSNumber)?.intValue ?? 0
+    }
+
+    private func scrollPage(to y: Int) async throws -> Int {
+        try await intResult(
+            "window.scrollTo({ top: y, left: 0, behavior: 'instant' }); return Math.round(window.scrollY)",
+            args: ["y": y]
+        )
+    }
+
+    /// Scroll through the page once so lazy images and scroll-reveal sections trigger, then
+    /// wait (bounded) for images to finish loading. Returns the settled document height.
+    private func warmUpPage(viewportHeight vh: Int) async throws -> Int {
+        var docHeight = try await intResult(Self.documentHeightJS)
+        var y = 0
+        while y < min(docHeight, Self.maxFullPageHeight) {
+            _ = try await scrollPage(to: y)
+            try await Task.sleep(nanoseconds: 120_000_000)
+            docHeight = try await intResult(Self.documentHeightJS)  // lazy content can grow the page
+            y += max(vh * 3 / 4, 1)
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            // Only images with a rendered box: hidden lazy gallery items never load.
+            let pending = try await intResult(
+                "return [...document.images].filter(i => !i.complete && i.getClientRects().length > 0).length"
+            )
+            if pending == 0 { break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return try await intResult(Self.documentHeightJS)
+    }
+
+    private func captureFullPage(width w: Int, viewportHeight vh: Int) async throws -> CGImage {
+        setViewportSize(width: w, height: vh)
+        try await Task.sleep(nanoseconds: 150_000_000)
+
+        let startY = try await intResult("return Math.round(window.scrollY)")
+        do {
+            let docHeight = try await warmUpPage(viewportHeight: vh)
+            let totalHeight = min(max(docHeight, vh), Self.maxFullPageHeight)
+            _ = try await scrollPage(to: 0)
+            try await Task.sleep(nanoseconds: 200_000_000)
+
+            guard let context = CGContext(
+                data: nil, width: w, height: totalHeight, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
             ) else {
-                throw BrowserError.screenshotFailed("Failed to encode JPEG")
+                throw BrowserError.screenshotFailed("Failed to allocate \(w)x\(totalHeight) canvas")
             }
-            return jpegData.base64EncodedString()
-        }.value
+            context.interpolationQuality = .high
 
-        return base64
+            var y = 0
+            while y < totalHeight {
+                // The last slice is pulled back so it ends flush with the page bottom.
+                let scrolled = try await scrollPage(to: min(y, max(totalHeight - vh, 0)))
+                _ = try await evaluate(Self.finishAnimationsJS)
+                _ = try await evaluate(Self.decodeVisibleImagesJS)
+                try await Task.sleep(nanoseconds: 150_000_000)
+                let slice = try await snapshotImage(width: w, downscaleToCSSPixels: false)
+                // CGContext origin is bottom-left; slices are placed by their top edge.
+                context.draw(slice, in: CGRect(x: 0, y: totalHeight - scrolled - vh, width: w, height: vh))
+                if y == 0 { _ = try await evaluate(Self.hideFixedJS) }
+                y += vh
+            }
+
+            _ = try? await evaluate(Self.restoreFixedJS)
+            _ = try? await scrollPage(to: startY)
+            guard let image = context.makeImage() else {
+                throw BrowserError.screenshotFailed("Failed to compose full-page image")
+            }
+            return image
+        } catch {
+            _ = try? await evaluate(Self.restoreFixedJS)
+            _ = try? await scrollPage(to: startY)
+            throw error
+        }
+    }
+
+    private static func resample(_ image: CGImage, toWidth width: Int, height: Int) throws -> CGImage {
+        guard width > 0, height > 0,
+              let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              )
+        else {
+            throw BrowserError.screenshotFailed("Failed to create resampling context")
+        }
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let result = context.makeImage() else {
+            throw BrowserError.screenshotFailed("Failed to resample image")
+        }
+        return result
+    }
+
+    /// Resize the window so the web view itself is exactly width x height points.
+    private func setViewportSize(width: Int, height: Int) {
+        guard let content = window.contentView else { return }
+        content.layoutSubtreeIfNeeded()
+        // URL bar and status bar share the content view with the web view.
+        let chrome = content.bounds.height - webView.frame.height
+        window.setContentSize(NSSize(width: CGFloat(width), height: CGFloat(height) + chrome))
+        content.layoutSubtreeIfNeeded()
     }
 
     // MARK: - Focus URL Bar
@@ -826,6 +1076,7 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
 
         // Use the provided configuration (shares process pool + data store with parent)
         let popupWebView = WKWebView(frame: .zero, configuration: configuration)
+        popupWebView.customUserAgent = webView.customUserAgent
         // Keep translatesAutoresizingMaskIntoConstraints = true (default)
         // so NSWindow manages sizing via autoresizing mask
 
@@ -942,6 +1193,12 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         completionHandler: @escaping ([URL]?) -> Void
     ) {
         Task { @MainActor in
+            if let urls = self.queuedOpenPanelURLs {
+                self.queuedOpenPanelURLs = nil
+                completionHandler(urls)
+                return
+            }
+
             let panel = NSOpenPanel()
             panel.allowsMultipleSelection = parameters.allowsMultipleSelection
             panel.canChooseDirectories = parameters.allowsDirectories

@@ -187,3 +187,44 @@ def test_wait_idle():
     run_aslan("nav", "https://example.com", "--wait", "load")
     r = run_aslan("wait", "--idle", "--timeout", "5000")
     assert "ready" in r.stdout
+
+
+def _png_size(path: str) -> tuple[int, int]:
+    """Width, height from a PNG's IHDR chunk."""
+    import struct
+    with open(path, "rb") as f:
+        head = f.read(24)
+    assert head[:8] == b"\x89PNG\r\n\x1a\n"
+    return struct.unpack(">II", head[16:24])
+
+
+def test_shot_url_single_frame_png():
+    path = "/tmp/aslan-cli-shot-frame.png"
+    if os.path.exists(path):
+        os.remove(path)
+    run_aslan("shot", "https://example.com", path, "--width", "800", "--height", "600")
+    assert _png_size(path) == (800, 600)
+
+
+def test_shot_url_full_page_is_taller_than_viewport():
+    path = "/tmp/aslan-cli-shot-full.png"
+    if os.path.exists(path):
+        os.remove(path)
+    run_aslan("shot", "https://en.wikipedia.org/wiki/Web_browser", path,
+              "--width", "1000", "--full-page")
+    w, h = _png_size(path)
+    assert w == 1000
+    assert h > 720
+
+
+def test_shot_url_leaves_no_tab_behind():
+    before = run_aslan("tabs").stdout
+    run_aslan("shot", "https://example.com", "/tmp/aslan-cli-shot-clean.png")
+    assert run_aslan("tabs").stdout == before
+
+
+def test_shot_full_page_with_height_is_rejected():
+    r = run_aslan("shot", "https://example.com", "x.png", "--full-page", "--height", "500",
+                  check=False)
+    assert r.returncode != 0
+    assert "not allowed" in r.stderr

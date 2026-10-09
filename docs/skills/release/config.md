@@ -17,9 +17,9 @@
 ## Version Sync Rules
 
 - App version follows semver: `MAJOR.MINOR.PATCH`
-- Build number (`CURRENT_PROJECT_VERSION`) increments by 1 each release (currently at 7 for v1.5.0)
+- Build number (`CURRENT_PROJECT_VERSION`) increments by 1 each release (currently at 8 for v1.6.0)
 - Python SDK minor tracks app minor: app `1.5.0` → SDK `0.5.0` (major is always 0 until 1.0 app release)
-- Update ALL occurrences of each pattern in project.pbxproj (there are 5 of each)
+- Update ALL occurrences of each pattern in project.pbxproj (there are 6 of each)
 
 ## Build
 

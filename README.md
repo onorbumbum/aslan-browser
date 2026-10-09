@@ -27,6 +27,7 @@ Aslan wraps macOS's built-in WKWebView and exposes it over a Unix socket. No Chr
 - **Native macOS.** WKWebView, not Chrome. No 500MB browser download.
 - **Fast.** Sub-2ms JS eval, sub-30ms screenshots. Unix socket, not HTTP.
 - **Accessibility-tree-first.** 10-100x fewer tokens than raw DOM for the same page.
+- **Agent-safe sessions.** Named sessions isolate tabs and current-tab state across parallel agents.
 - **Zero-dependency Python SDK.** Only stdlib (`socket`, `json`, `asyncio`, `base64`).
 - **Simple protocol.** NDJSON JSON-RPC 2.0. You can build a client in any language.
 
@@ -333,6 +334,16 @@ jpeg_bytes = browser.screenshot(quality=70)
 
 # Or save to disk
 browser.save_screenshot("page.jpg", quality=85, width=1440)
+
+# PNG at an exact viewport, or the whole page at a given width
+browser.save_screenshot("page.png", format="png", viewport_width=1280, full_page=True)
+```
+
+Or from the command line, no setup:
+
+```bash
+aslan shot https://example.com out.png --width 1280 --full-page   # whole page
+aslan shot https://example.com out.png --width 390 --height 844   # one mobile frame
 ```
 
 ### Multi-Tab
@@ -380,19 +391,36 @@ with AslanBrowser() as browser:
 
 ### Sessions
 
-Sessions let you isolate tabs for different agents. Destroying a session closes all its tabs.
+Sessions isolate tabs for different agents. Each session can have its own current-tab state, so parallel agents do not collide. Destroying a session closes all its tabs.
+
+```bash
+# Agent A
+export ASLAN_SESSION=agent-research
+aslan tab:new https://google.com
+aslan tree
+
+# Agent B
+export ASLAN_SESSION=agent-shopping
+aslan tab:new https://amazon.com
+aslan tree
+
+# Cleanup
+aslan session:destroy agent-research
+aslan session:destroy agent-shopping
+```
 
 ```python
 with AslanBrowser() as browser:
-    session1 = browser.session_create(name="agent-research")
-    session2 = browser.session_create(name="agent-shopping")
+    research = browser.session_get_or_create("agent-research")
+    shopping = browser.session_get_or_create("agent-shopping")
 
-    tab_a = browser.tab_create(url="https://google.com", session_id=session1)
-    tab_b = browser.tab_create(url="https://amazon.com", session_id=session2)
+    tab_a = browser.tab_create(url="https://google.com", session_id=research)
+    tab_b = browser.tab_create(url="https://amazon.com", session_id=shopping)
 
-    research_tabs = browser.tab_list(session_id=session1)
+    research_tabs = browser.tab_list(session_id=research)
+    sessions = browser.session_list()
 
-    browser.session_destroy(session1)
+    browser.session_destroy("agent-research")
 ```
 
 ### Cookies
@@ -498,8 +526,8 @@ Use `ref` values (`@e0`, `@e1`, ...) in `click()`, `fill()`, etc.
 
 | Method | Description |
 |---|---|
-| `screenshot(tab_id, quality, width)` | Take screenshot, returns JPEG `bytes` |
-| `save_screenshot(path, tab_id, quality, width)` | Save screenshot to file |
+| `screenshot(tab_id, quality, width, *, format, viewport_width, viewport_height, full_page)` | Take screenshot, returns JPEG (default) or PNG `bytes`. `full_page` and `viewport_height` are mutually exclusive |
+| `save_screenshot(path, tab_id, quality, width, *, ...)` | Same options, saved to file |
 
 ### Cookies
 
@@ -521,7 +549,9 @@ Use `ref` values (`@e0`, `@e1`, ...) in `click()`, `fill()`, etc.
 | Method | Description |
 |---|---|
 | `session_create(name)` | Create a named session, returns session ID |
-| `session_destroy(session_id)` | Destroy session and close all its tabs |
+| `session_get_or_create(name)` | Return an existing named session or create it |
+| `session_list()` | List open sessions and tab counts |
+| `session_destroy(session_id_or_name)` | Destroy session and close all its tabs |
 
 ### Batch / Parallel
 
@@ -732,15 +762,9 @@ WKWebView needs a window hierarchy to render. Make sure you're using the app, no
 
 ### Sites detecting automation
 
-Aslan uses a Chrome-compatible User-Agent string by default. Some sites may still detect automation. You can set a custom one:
+New builds set a Safari-compatible `WKWebView.customUserAgent` before navigation, using the installed Safari version with a 17.0 fallback. Popup windows inherit their parent tab's user-agent. This avoids the bare WebKit identity that can cause sites to serve simplified pages.
 
-```python
-browser.evaluate("""
-    Object.defineProperty(navigator, 'userAgent', {
-        get: () => 'your-custom-user-agent'
-    });
-""")
-```
+Rebuild and restart to apply this to the running app. Overriding `navigator.userAgent` with JavaScript changes only the page-visible property, not the HTTP user-agent used to request the page. Some sites may still restrict embedded browsers.
 
 ---
 
@@ -756,7 +780,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"navigate","params":{"tabId":"tab0","url"
 
 One JSON line per request. One JSON line per response. Notifications (events) come as JSON lines without an `id` field.
 
-The [Python SDK source](sdk/python/aslan_browser/client.py) is a complete client implementation in under 300 lines, no dependencies. Read it if you want to build a client in another language.
+The [Python SDK source](sdk/python/aslan_browser/client.py) is a complete, dependency-free client implementation. Read it if you want to build a client in another language.
 
 ---
 
@@ -765,6 +789,7 @@ The [Python SDK source](sdk/python/aslan_browser/client.py) is a complete client
 - [x] Pre-built binaries on GitHub Releases
 - [x] File upload support (native dialog + DataTransfer API injection) — v1.4.0
 - [x] Learn mode — record user interactions to auto-generate playbooks — v1.5.0
+- [x] Named sessions — isolate tabs/current-tab state for parallel agents — v1.6.0
 - [ ] `pip install aslan-browser` on PyPI
 - [ ] Content blocking (ad/tracker filtering via `WKContentRuleList`)
 - [ ] PDF text extraction

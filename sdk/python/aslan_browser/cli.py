@@ -5,46 +5,114 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import shlex
 import sys
 from typing import Any, Optional
 
 from aslan_browser import __version__
 from aslan_browser.client import AslanBrowser, AslanBrowserError
 
-_STATE_FILE = "/tmp/aslan-cli.json"
+_DEFAULT_STATE_FILE = "/tmp/aslan-cli.json"
+_DEFAULT_SHOT_PATH = "/tmp/aslan-screenshot.jpg"
 
 
 # ── State management ──────────────────────────────────────────────
 
-def _load_state() -> dict:
+def _safe_session_name(name: str) -> str:
+    """Return a filesystem-safe session name for per-session CLI state."""
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", name).strip(".-")
+    return safe or "session"
+
+
+def _session_name(args: Optional[argparse.Namespace] = None) -> Optional[str]:
+    """Resolve requested session name from --session or ASLAN_SESSION."""
+    if args is not None and hasattr(args, "session") and args.session:
+        return args.session
+    return os.environ.get("ASLAN_SESSION")
+
+
+def _state_file(session_name: Optional[str] = None) -> str:
+    """State file path. ASLAN_SESSION gets isolated current-tab state."""
+    explicit = os.environ.get("ASLAN_STATE_FILE")
+    if explicit:
+        return explicit
+    effective_session = session_name or os.environ.get("ASLAN_SESSION")
+    if effective_session:
+        return f"/tmp/aslan-cli-session-{_safe_session_name(effective_session)}.json"
+    return _DEFAULT_STATE_FILE
+
+
+def _load_state(session_name: Optional[str] = None) -> dict:
     """Load CLI state from disk. Creates default if missing."""
-    if os.path.exists(_STATE_FILE):
+    state_file = _state_file(session_name)
+    if os.path.exists(state_file):
         try:
-            with open(_STATE_FILE) as f:
+            with open(state_file) as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError):
             pass
-    return {"tab": "tab0"}
+    state: dict[str, Any] = {"tab": "tab0"}
+    if session_name:
+        state["session_name"] = session_name
+    return state
 
 
-def _save_state(state: dict) -> None:
+def _save_state(state: dict, session_name: Optional[str] = None) -> None:
     """Write CLI state to disk."""
-    with open(_STATE_FILE, "w") as f:
+    with open(_state_file(session_name), "w") as f:
         json.dump(state, f)
 
 
+def _resolve_session_id(browser: AslanBrowser, session_name_or_id: str, *, create: bool = True) -> str:
+    """Resolve a session by ID or name; create named sessions on demand."""
+    sessions = browser.session_list()
+    for session in sessions:
+        if session.get("sessionId") == session_name_or_id or session.get("name") == session_name_or_id:
+            return session["sessionId"]
+    if create:
+        return browser.session_get_or_create(session_name_or_id)
+    raise AslanBrowserError(-32004, f"Session not found: {session_name_or_id}")
+
+
 def _current_tab(args: argparse.Namespace) -> str:
-    """Resolve the target tab: explicit --tab flag, or current from state."""
+    """Resolve the target tab: explicit --tab, session current tab, or default state."""
     if hasattr(args, "tab") and args.tab:
         return args.tab
+
+    session_name = _session_name(args)
+    if session_name:
+        b = _connect()
+        try:
+            session_id = _resolve_session_id(b, session_name, create=True)
+            state = _load_state(session_name)
+            current = state.get("tab")
+            tabs = b.tab_list(session_id=session_id)
+            tab_ids = [t["tabId"] for t in tabs]
+            if current in tab_ids:
+                return current
+            if tab_ids:
+                current = tab_ids[0]
+            else:
+                current = b.tab_create(session_id=session_id)
+            _set_current_tab(current, session_name=session_name, session_id=session_id)
+            return current
+        finally:
+            b.close()
+
     return _load_state().get("tab", "tab0")
 
 
-def _set_current_tab(tab_id: str) -> None:
-    """Update the current tab in the state file."""
-    state = _load_state()
+def _set_current_tab(tab_id: str, session_name: Optional[str] = None, session_id: Optional[str] = None) -> None:
+    """Update the current tab in the matching state file."""
+    effective_session = session_name or os.environ.get("ASLAN_SESSION")
+    state = _load_state(effective_session)
     state["tab"] = tab_id
-    _save_state(state)
+    if effective_session:
+        state["session_name"] = effective_session
+    if session_id:
+        state["session_id"] = session_id
+    _save_state(state, effective_session)
 
 
 # ── Connection helper ─────────────────────────────────────────────
@@ -145,52 +213,62 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="Wait strategy (default: load)")
     p.add_argument("--timeout", type=int, default=30000, help="Timeout in ms")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.add_argument("--json", action="store_true", dest="json_output")
     p.set_defaults(func=cmd_nav)
 
     p = sub.add_parser("back", help="Navigate back")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.add_argument("--json", action="store_true", dest="json_output")
     p.set_defaults(func=cmd_back)
 
     p = sub.add_parser("forward", help="Navigate forward")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.add_argument("--json", action="store_true", dest="json_output")
     p.set_defaults(func=cmd_forward)
 
     p = sub.add_parser("reload", help="Reload the page")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.add_argument("--json", action="store_true", dest="json_output")
     p.set_defaults(func=cmd_reload)
 
     # ── reading ───────────────────────────────────────────────────
     p = sub.add_parser("tree", help="Print accessibility tree")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.add_argument("--json", action="store_true", dest="json_output")
     p.set_defaults(func=cmd_tree)
 
     p = sub.add_parser("title", help="Print page title")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_title)
 
     p = sub.add_parser("url", help="Print current URL")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_url)
 
     p = sub.add_parser("text", help="Print page text content")
     p.add_argument("--chars", type=int, default=3000, help="Max characters (default: 3000)")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_text)
 
     p = sub.add_parser("html", help="Print page HTML")
     p.add_argument("--chars", type=int, default=20000, help="Max characters (default: 20000)")
     p.add_argument("--selector", help="Get innerHTML of a specific element instead of body")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_html)
 
     p = sub.add_parser("eval", help="Evaluate JavaScript")
     p.add_argument("script", help='JavaScript to evaluate (must use "return")')
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.add_argument("--json", action="store_true", dest="json_output")
     p.set_defaults(func=cmd_eval)
 
@@ -198,24 +276,28 @@ def _build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("click", help="Click an element")
     p.add_argument("target", help="@eN ref or CSS selector")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_click)
 
     p = sub.add_parser("fill", help="Fill an input field")
     p.add_argument("target", help="@eN ref or CSS selector")
     p.add_argument("value", help="Value to fill")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_fill)
 
     p = sub.add_parser("type", help="Type text into any field (works on contenteditable)")
     p.add_argument("target", help="@eN ref or CSS selector")
     p.add_argument("value", help="Text to type")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_type)
 
     p = sub.add_parser("select", help="Select a dropdown option")
     p.add_argument("target", help="@eN ref or CSS selector")
     p.add_argument("value", help="Option value to select")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_select)
 
     p = sub.add_parser("key", help="Send a keypress")
@@ -225,6 +307,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--shift", action="store_true", help="Hold Shift")
     p.add_argument("--alt", action="store_true", help="Hold Alt/Option")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_key)
 
     p = sub.add_parser("scroll", help="Scroll the page")
@@ -232,6 +315,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--up", type=int, metavar="PX", help="Scroll up by pixels")
     p.add_argument("--to", metavar="REF", help="Scroll element into view (@eN or CSS)")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_scroll)
 
     # ── wait ──────────────────────────────────────────────────────
@@ -240,6 +324,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--load", action="store_true", help="Wait for page load")
     p.add_argument("--timeout", type=int, default=10000, help="Timeout in ms (default: 10000)")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_wait)
 
     # ── file upload ────────────────────────────────────────────────
@@ -249,19 +334,37 @@ def _build_parser() -> argparse.ArgumentParser:
                     help='CSS selector for file input (default: input[type="file"])')
     p.add_argument("--name", help="Override filename sent to the page")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_upload)
 
     # ── screenshots ───────────────────────────────────────────────
-    p = sub.add_parser("shot", help="Take a screenshot")
-    p.add_argument("path", nargs="?", default="/tmp/aslan-screenshot.jpg",
-                    help="Output file path (default: /tmp/aslan-screenshot.jpg)")
+    p = sub.add_parser(
+        "shot",
+        help="Take a screenshot of a URL or the current tab",
+        description=(
+            "aslan shot [URL] [PATH] — with a URL, opens a temporary hidden tab, "
+            "loads it, captures and closes it. Without a URL, captures the current tab. "
+            "PATH extension picks the format: .png or .jpg/.jpeg."
+        ),
+    )
+    p.add_argument("target", nargs="*", metavar="[URL] [PATH]",
+                    help="Optional URL (http/https/file/about), then output path "
+                         f"(default: {_DEFAULT_SHOT_PATH})")
     p.add_argument("--quality", type=int, default=70, help="JPEG quality 0-100 (default: 70)")
-    p.add_argument("--width", type=int, default=1440, help="Viewport width (default: 1440)")
-    p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--width", type=int, default=None,
+                    help="Viewport width in px (URL default: 1280)")
+    size = p.add_mutually_exclusive_group()
+    size.add_argument("--height", type=int, default=None,
+                       help="Viewport height in px (URL default: 720); single frame only")
+    size.add_argument("--full-page", action="store_true", dest="full_page",
+                       help="Capture the whole page at --width (scroll-and-stitch; height comes from the page)")
+    p.add_argument("--tab", help="Target tab ID (current-tab mode)")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_shot)
 
     # ── tab management ────────────────────────────────────────────
     p = sub.add_parser("tabs", help="List all open tabs")
+    p.add_argument("--session", help="Filter by session name or ID")
     p.add_argument("--json", action="store_true", dest="json_output")
     p.set_defaults(func=cmd_tabs)
 
@@ -270,22 +373,46 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--hidden", action="store_true", help="Create hidden tab")
     p.add_argument("--width", type=int, default=1440)
     p.add_argument("--height", type=int, default=900)
+    p.add_argument("--session", help="Create tab in session name or ID")
     p.add_argument("--json", action="store_true", dest="json_output")
     p.set_defaults(func=cmd_tab_new)
 
     p = sub.add_parser("tab:close", help="Close a tab")
     p.add_argument("tab_id", nargs="?", help="Tab ID to close (default: current tab)")
+    p.add_argument("--session", help="Use current tab from session name or ID")
     p.set_defaults(func=cmd_tab_close)
 
     p = sub.add_parser("tab:use", help="Switch the current tab")
     p.add_argument("tab_id", help="Tab ID to switch to")
+    p.add_argument("--session", help="Set current tab for session name or ID")
     p.set_defaults(func=cmd_tab_use)
 
     p = sub.add_parser("tab:wait", help="Wait for a CSS selector to appear")
     p.add_argument("selector", help="CSS selector to wait for")
     p.add_argument("--timeout", type=int, default=5000, help="Timeout in ms (default: 5000)")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_tab_wait)
+
+    # ── session management ────────────────────────────────────────
+    p = sub.add_parser("sessions", help="List sessions")
+    p.add_argument("--json", action="store_true", dest="json_output")
+    p.set_defaults(func=cmd_sessions)
+
+    p = sub.add_parser("session:create", help="Create a new named session")
+    p.add_argument("name", help="Session name")
+    p.add_argument("--json", action="store_true", dest="json_output")
+    p.set_defaults(func=cmd_session_create)
+
+    p = sub.add_parser("session:use", help="Create/find a named session and print usage info")
+    p.add_argument("name", help="Session name")
+    p.add_argument("--json", action="store_true", dest="json_output")
+    p.add_argument("--shell", action="store_true", help="Print shell export command")
+    p.set_defaults(func=cmd_session_use)
+
+    p = sub.add_parser("session:destroy", help="Destroy a session by name or ID and close its tabs")
+    p.add_argument("name", help="Session name or ID")
+    p.set_defaults(func=cmd_session_destroy)
 
     # ── learn mode ────────────────────────────────────────────────
     p = sub.add_parser("learn:start", help="Start learn mode recording")
@@ -304,6 +431,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("cookies", help="Get cookies")
     p.add_argument("--url", help="Filter by URL")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.add_argument("--json", action="store_true", dest="json_output")
     p.set_defaults(func=cmd_cookies)
 
@@ -314,6 +442,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--path", default="/", help="Cookie path (default: /)")
     p.add_argument("--expires", type=float, help="Expiry as Unix timestamp")
     p.add_argument("--tab", help="Target tab ID")
+    p.add_argument("--session", help="Target session name or ID")
     p.set_defaults(func=cmd_set_cookie)
 
     return parser
@@ -686,23 +815,95 @@ def cmd_upload(args: argparse.Namespace) -> None:
 
 # ── screenshots ───────────────────────────────────────────────────
 
+_URL_RE = re.compile(r"^(https?|file|about):", re.IGNORECASE)
+_SHOT_FORMATS = {".png": "png", ".jpg": "jpeg", ".jpeg": "jpeg"}
+_URL_MODE_VIEWPORT = (1280, 720)
+_MAX_FULL_PAGE_HEIGHT = 16384
+
+
+def _shot_target(args: argparse.Namespace) -> tuple[Optional[str], str, str]:
+    """Split `shot` positionals into (url, path, format); exit on bad input."""
+    items = list(args.target)
+    url = items.pop(0) if items and _URL_RE.match(items[0]) else None
+    if len(items) > 1:
+        sys.exit(f"Error: unexpected arguments: {' '.join(items[1:])}")
+    path = items[0] if items else _DEFAULT_SHOT_PATH
+    fmt = _SHOT_FORMATS.get(os.path.splitext(path)[1].lower())
+    if fmt is None:
+        sys.exit(f"Error: unsupported screenshot extension in '{path}' (use .png, .jpg or .jpeg)")
+    return url, path, fmt
+
+
 def cmd_shot(args: argparse.Namespace) -> None:
+    url, path, fmt = _shot_target(args)
+    opts: dict[str, Any] = {"quality": args.quality, "format": fmt, "full_page": args.full_page}
+
+    if url:
+        width = args.width or _URL_MODE_VIEWPORT[0]
+        opts["viewport_width"] = width
+        if not args.full_page:
+            opts["viewport_height"] = args.height or _URL_MODE_VIEWPORT[1]
+        _shot_url(args, url, path, width, opts)
+        return
+
+    # Current-tab mode: only resize when asked; otherwise keep the legacy capture.
+    if args.width is not None:
+        opts["viewport_width"] = args.width
+    if args.height is not None:
+        opts["viewport_height"] = args.height
     tab = _current_tab(args)
     b = _connect()
     try:
-        size = b.save_screenshot(args.path, tab_id=tab, quality=args.quality, width=args.width)
-        print(f"{args.path} ({size} bytes)")
+        size = b.save_screenshot(path, tab_id=tab, **opts)
+        print(f"{path} ({size} bytes)")
+        _warn_if_truncated(b, tab, args.full_page)
     finally:
         b.close()
+
+
+def _shot_url(args: argparse.Namespace, url: str, path: str, width: int, opts: dict) -> None:
+    """Load `url` in a throwaway hidden tab, capture it, and always close the tab."""
+    session_name = _session_name(args)
+    b = _connect()
+    tab = None
+    try:
+        session_id = _resolve_session_id(b, session_name, create=True) if session_name else None
+        height = opts.get("viewport_height", _URL_MODE_VIEWPORT[1])
+        tab = b.tab_create(width=width, height=height, hidden=True, session_id=session_id)
+        b.navigate(url, tab_id=tab)
+        size = b.save_screenshot(path, tab_id=tab, **opts)
+        print(f"{path} ({size} bytes)")
+        _warn_if_truncated(b, tab, args.full_page)
+    finally:
+        if tab:
+            try:
+                b.tab_close(tab)
+            except AslanBrowserError:
+                pass
+        b.close()
+
+
+def _warn_if_truncated(b: AslanBrowser, tab: str, full_page: bool) -> None:
+    """Tell the user when a full-page capture was clipped at the height cap."""
+    if not full_page:
+        return
+    height = b.evaluate("return document.documentElement.scrollHeight", tab_id=tab)
+    if isinstance(height, (int, float)) and height > _MAX_FULL_PAGE_HEIGHT:
+        print(
+            f"Warning: page is {int(height)}px tall; capture clipped at {_MAX_FULL_PAGE_HEIGHT}px",
+            file=sys.stderr,
+        )
 
 
 # ── tab management ────────────────────────────────────────────────
 
 def cmd_tabs(args: argparse.Namespace) -> None:
+    session_name = _session_name(args)
     b = _connect()
     try:
-        tabs = b.tab_list()
-        current = _load_state().get("tab", "tab0")
+        session_id = _resolve_session_id(b, session_name, create=True) if session_name else None
+        tabs = b.tab_list(session_id=session_id)
+        current = _load_state(session_name).get("tab", "tab0")
         if getattr(args, "json_output", False):
             _print_json(tabs)
         else:
@@ -711,23 +912,33 @@ def cmd_tabs(args: argparse.Namespace) -> None:
                 tid = t["tabId"]
                 url = t.get("url", "")
                 title = t.get("title", "")
-                print(f"{tid}{marker} {url}\t\"{title}\"")
+                session = t.get("sessionName") or t.get("sessionId") or ""
+                suffix = f" [{session}]" if session else ""
+                print(f"{tid}{marker} {url}\t\"{title}\"{suffix}")
     finally:
         b.close()
 
 
 def cmd_tab_new(args: argparse.Namespace) -> None:
+    session_name = _session_name(args)
     b = _connect()
     try:
+        session_id = _resolve_session_id(b, session_name, create=True) if session_name else None
         params = {"width": args.width, "height": args.height}
         if args.url:
             params["url"] = args.url
         if args.hidden:
             params["hidden"] = True
+        if session_id:
+            params["session_id"] = session_id
         tab_id = b.tab_create(**params)
-        _set_current_tab(tab_id)
+        _set_current_tab(tab_id, session_name=session_name, session_id=session_id)
         if getattr(args, "json_output", False):
-            _print_json({"tabId": tab_id})
+            result = {"tabId": tab_id}
+            if session_id:
+                result["sessionId"] = session_id
+                result["sessionName"] = session_name
+            _print_json(result)
         else:
             print(tab_id)
     finally:
@@ -735,15 +946,27 @@ def cmd_tab_new(args: argparse.Namespace) -> None:
 
 
 def cmd_tab_close(args: argparse.Namespace) -> None:
-    tab = args.tab_id if args.tab_id else _load_state().get("tab", "tab0")
+    session_name = _session_name(args)
+    tab = args.tab_id if args.tab_id else _load_state(session_name).get("tab", "tab0")
     b = _connect()
     try:
+        session_id = _resolve_session_id(b, session_name, create=False) if session_name else None
         b.tab_close(tab)
-        # If we closed the current tab, switch to tab0
-        state = _load_state()
+        state = _load_state(session_name)
         if state.get("tab") == tab:
-            _set_current_tab("tab0")
-            print(f"Closed {tab}. Switched to tab0.")
+            remaining = b.tab_list(session_id=session_id) if session_id else b.tab_list()
+            if remaining:
+                new_current = remaining[0]["tabId"]
+                _set_current_tab(new_current, session_name=session_name, session_id=session_id)
+                print(f"Closed {tab}. Switched to {new_current}.")
+            else:
+                state.pop("tab", None)
+                if session_name:
+                    state["session_name"] = session_name
+                if session_id:
+                    state["session_id"] = session_id
+                _save_state(state, session_name)
+                print(f"Closed {tab}.")
         else:
             print(f"Closed {tab}.")
     finally:
@@ -751,15 +974,16 @@ def cmd_tab_close(args: argparse.Namespace) -> None:
 
 
 def cmd_tab_use(args: argparse.Namespace) -> None:
-    # Verify the tab exists
+    session_name = _session_name(args)
     b = _connect()
     try:
-        tabs = b.tab_list()
+        session_id = _resolve_session_id(b, session_name, create=False) if session_name else None
+        tabs = b.tab_list(session_id=session_id)
         tab_ids = [t["tabId"] for t in tabs]
         if args.tab_id not in tab_ids:
             print(f"Error: tab {args.tab_id} not found. Open tabs: {', '.join(tab_ids)}", file=sys.stderr)
             sys.exit(1)
-        _set_current_tab(args.tab_id)
+        _set_current_tab(args.tab_id, session_name=session_name, session_id=session_id)
         print(f"Switched to {args.tab_id}")
     finally:
         b.close()
@@ -771,6 +995,67 @@ def cmd_tab_wait(args: argparse.Namespace) -> None:
     try:
         b.wait_for_selector(args.selector, tab_id=tab, timeout=args.timeout)
         print("found")
+    finally:
+        b.close()
+
+
+# ── session management ────────────────────────────────────────────
+
+def cmd_sessions(args: argparse.Namespace) -> None:
+    b = _connect()
+    try:
+        sessions = b.session_list()
+        if getattr(args, "json_output", False):
+            _print_json(sessions)
+        else:
+            for s in sessions:
+                sid = s.get("sessionId", "")
+                name = s.get("name", "")
+                tab_count = s.get("tabCount", 0)
+                print(f"{sid}\t{name}\t{tab_count} tabs")
+    finally:
+        b.close()
+
+
+def cmd_session_create(args: argparse.Namespace) -> None:
+    b = _connect()
+    try:
+        session_id = b.session_create(args.name)
+        if getattr(args, "json_output", False):
+            _print_json({"sessionId": session_id, "name": args.name})
+        else:
+            print(session_id)
+    finally:
+        b.close()
+
+
+def cmd_session_use(args: argparse.Namespace) -> None:
+    b = _connect()
+    try:
+        session_id = b.session_get_or_create(args.name)
+        _save_state({"session_name": args.name, "session_id": session_id}, args.name)
+        if getattr(args, "json_output", False):
+            _print_json({
+                "sessionId": session_id,
+                "name": args.name,
+                "stateFile": _state_file(args.name),
+                "export": f"export ASLAN_SESSION={shlex.quote(args.name)}",
+            })
+        elif args.shell:
+            print(f"export ASLAN_SESSION={shlex.quote(args.name)}")
+        else:
+            print(f"Using session {args.name} ({session_id})")
+            print(f"State file: {_state_file(args.name)}")
+            print(f"Run: export ASLAN_SESSION={shlex.quote(args.name)}")
+    finally:
+        b.close()
+
+
+def cmd_session_destroy(args: argparse.Namespace) -> None:
+    b = _connect()
+    try:
+        closed = b.session_destroy(args.name)
+        print(f"Destroyed {args.name}. Closed tabs: {', '.join(closed) if closed else 'none'}")
     finally:
         b.close()
 

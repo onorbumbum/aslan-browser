@@ -10,6 +10,52 @@ import time
 from typing import Any, Optional
 
 
+def _screenshot_params(
+    tab_id: str,
+    quality: int,
+    width: int,
+    format: str,
+    viewport_width: Optional[int],
+    viewport_height: Optional[int],
+    full_page: bool,
+) -> dict[str, Any]:
+    """Build and validate params for the ``screenshot`` RPC."""
+    if full_page and viewport_height is not None:
+        raise ValueError("full_page and viewport_height are mutually exclusive")
+    if format not in ("jpeg", "png"):
+        raise ValueError('format must be "jpeg" or "png"')
+    params: dict[str, Any] = {
+        "tabId": tab_id, "quality": quality, "width": width, "format": format,
+    }
+    if viewport_width is not None:
+        params["viewportWidth"] = viewport_width
+    if viewport_height is not None:
+        params["viewportHeight"] = viewport_height
+    if full_page:
+        params["fullPage"] = True
+    return params
+
+
+def _screenshot_bytes(result: dict, params: dict[str, Any]) -> bytes:
+    """Decode a ``screenshot`` result, refusing output from an app too old for the request.
+
+    Apps without viewport/full-page support ignore those params and return a legacy JPEG
+    of the current view; they also omit ``format``. Writing that as the requested file
+    would be silently wrong, so fail loudly instead.
+    """
+    asked_new_features = (
+        "viewportWidth" in params or "viewportHeight" in params or "fullPage" in params
+        or params.get("format") == "png"
+    )
+    if asked_new_features and "format" not in result:
+        raise AslanBrowserError(
+            -32601,
+            "The running aslan-browser app is too old for viewport / full-page / PNG "
+            "screenshots. Quit it and launch the updated build.",
+        )
+    return base64.b64decode(result["data"])
+
+
 class AslanBrowserError(Exception):
     """Error returned by aslan-browser JSON-RPC server."""
 
@@ -277,13 +323,27 @@ class AslanBrowser:
     # ── screenshots ──────────────────────────────────────────────────
 
     def screenshot(
-        self, tab_id: str = "tab0", quality: int = 70, width: int = 1440
+        self,
+        tab_id: str = "tab0",
+        quality: int = 70,
+        width: int = 1440,
+        *,
+        format: str = "jpeg",
+        viewport_width: Optional[int] = None,
+        viewport_height: Optional[int] = None,
+        full_page: bool = False,
     ) -> bytes:
-        """Take a screenshot. Returns JPEG bytes."""
-        result = self._call(
-            "screenshot", {"tabId": tab_id, "quality": quality, "width": width}
+        """Take a screenshot. Returns JPEG (default) or PNG bytes.
+
+        ``width`` scales the output of the current view. ``viewport_width`` /
+        ``viewport_height`` instead resize the tab to that CSS-pixel viewport and
+        capture 1:1. ``full_page`` captures the whole document at ``viewport_width``
+        (height comes from the page, so it cannot be combined with ``viewport_height``).
+        """
+        params = _screenshot_params(
+            tab_id, quality, width, format, viewport_width, viewport_height, full_page
         )
-        return base64.b64decode(result["data"])
+        return _screenshot_bytes(self._call("screenshot", params), params)
 
     def save_screenshot(
         self,
@@ -291,9 +351,18 @@ class AslanBrowser:
         tab_id: str = "tab0",
         quality: int = 70,
         width: int = 1440,
+        *,
+        format: str = "jpeg",
+        viewport_width: Optional[int] = None,
+        viewport_height: Optional[int] = None,
+        full_page: bool = False,
     ) -> int:
         """Take a screenshot and save it to a file. Returns the file size in bytes."""
-        data = self.screenshot(tab_id=tab_id, quality=quality, width=width)
+        data = self.screenshot(
+            tab_id=tab_id, quality=quality, width=width, format=format,
+            viewport_width=viewport_width, viewport_height=viewport_height,
+            full_page=full_page,
+        )
         with open(path, "wb") as f:
             f.write(data)
         return len(data)
@@ -387,8 +456,18 @@ class AslanBrowser:
         result = self._call("session.create", params)
         return result["sessionId"]
 
+    def session_get_or_create(self, name: str) -> str:
+        """Return the existing session with this name, or create it."""
+        result = self._call("session.use", {"name": name})
+        return result["sessionId"]
+
+    def session_list(self) -> list[dict]:
+        """List open sessions."""
+        result = self._call("session.list")
+        return result.get("sessions", [])
+
     def session_destroy(self, session_id: str) -> list[str]:
-        """Destroy a session and close all its tabs. Returns closed tab IDs."""
+        """Destroy a session by ID or name and close all its tabs. Returns closed tab IDs."""
         result = self._call("session.destroy", {"sessionId": session_id})
         closed = result.get("closedTabs", [])
         # Remove closed tabs from local tracking

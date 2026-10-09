@@ -6,7 +6,8 @@ Quick reference for AI agents. Run `aslan <command>`.
 
 - Connects to `/tmp/aslan-browser.sock` automatically.
 - State file `/tmp/aslan-cli.json` tracks the current tab.
-- All commands target the current tab unless `--tab <id>` is given.
+- `ASLAN_SESSION=<name>` uses isolated state at `/tmp/aslan-cli-session-<name>.json` and auto-creates/targets that named session.
+- All commands target the current tab unless `--tab <id>` is given. Most tab-targeting commands also accept `--session <name-or-id>`.
 - Each invocation connects, runs one operation, disconnects. No persistent connection.
 
 ## Global Flags
@@ -14,6 +15,7 @@ Quick reference for AI agents. Run `aslan <command>`.
 | Flag | Description |
 |---|---|
 | `--tab <id>` | Override the current tab for this command |
+| `--session <name-or-id>` | Target current tab in a session for commands that support it |
 | `--json` | Output raw JSON (on commands that support it) |
 
 ---
@@ -146,26 +148,55 @@ aslan upload /tmp/doc.pdf --selector "#file-upload"
 ## Screenshots
 
 ```bash
-aslan shot [<path>] [--quality <0-100>] [--width <px>]
-# Default: /tmp/aslan-screenshot.jpg, quality 70, width 1440
+aslan shot [<url>] [<path>] [--width <px>] [--height <px> | --full-page] [--quality <0-100>]
+# Default path: /tmp/aslan-screenshot.jpg. Extension picks the format: .png, .jpg, .jpeg
 ```
 
-**Example:**
+With a URL, `shot` opens a temporary hidden tab, loads the page, captures and closes the tab.
+Without one it captures the current tab (unchanged unless you pass a size flag).
+
+| Flag | Meaning |
+|------|---------|
+| `--width W` | Viewport width in px (URL mode default: 1280) |
+| `--height H` | Viewport height in px (URL mode default: 720). Single frame only |
+| `--full-page` | Capture the whole page at `--width`; height comes from the page. Cannot be combined with `--height` |
+| `--quality N` | JPEG quality (ignored for PNG) |
+
+Full-page capture scrolls the page in viewport-sized slices and stitches them (viewport height is
+1080, or 844 when `--width` < 768, so `vh` sections size like a real visit). It scrolls the whole
+page first so lazy images and scroll-reveal sections load, settles finite CSS animations, and shows
+fixed/sticky headers only once at the top. Output is clipped at 16384px tall (a warning is printed).
+It takes a few seconds on long pages. Scrolling inner containers (apps with `body { overflow: hidden }`)
+is not captured.
+
+**Examples:**
 ```
-$ aslan shot /tmp/page.jpg --quality 90
-/tmp/page.jpg (52431 bytes)
+$ aslan shot https://example.com out.png --width 1280 --full-page
+out.png (183204 bytes)
+$ aslan shot https://example.com mobile.png --width 390 --height 844
+$ aslan shot /tmp/page.jpg --quality 90          # current tab, as before
 ```
+
+> Changed: `--width` was an output-scale value (default 1440). It is now the viewport width.
+> The Python SDK `width=` keeps its scaling meaning; use `viewport_width=` there.
 
 ---
 
-## Tab Management
+## Tab & Session Management
 
 ```bash
-aslan tabs                          # List tabs (* marks current)
-aslan tab:new [<url>] [--hidden]    # Create tab, switch to it
-aslan tab:close [<id>]              # Close tab (default: current)
-aslan tab:use <id>                  # Switch current tab
-aslan tab:wait <selector> [--timeout <ms>]  # Wait for CSS selector
+aslan sessions                                # List sessions
+aslan session:use <name>                      # Create/find session; prints export hint
+aslan session:use <name> --shell              # Print: export ASLAN_SESSION=<name>
+aslan session:destroy <name-or-id>            # Close all tabs in session
+
+ASLAN_SESSION=scout aslan tab:new https://example.com
+ASLAN_SESSION=scout aslan tree                # Uses scout's current tab/state
+aslan tabs --session scout                    # List tabs in session
+aslan tab:new [<url>] [--hidden] [--session scout]
+aslan tab:close [<id>] [--session scout]
+aslan tab:use <id> [--session scout]
+aslan tab:wait <selector> [--timeout <ms>] [--session scout]
 ```
 
 **Example:**
@@ -174,11 +205,12 @@ $ aslan tabs
 tab0  https://example.com	"Example Domain"
 tab1* https://google.com	"Google"
 
+$ export ASLAN_SESSION=scout
 $ aslan tab:new https://github.com
 tab2
 
-$ aslan tab:use tab0
-Switched to tab0
+$ aslan tab:use tab2
+Switched to tab2
 ```
 
 ---

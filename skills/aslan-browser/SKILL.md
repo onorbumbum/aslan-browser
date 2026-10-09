@@ -43,7 +43,7 @@ aslan status
 If not running:
 ```bash
 pkill -x "aslan-browser" 2>/dev/null; sleep 0.5
-open ~/Library/Developer/Xcode/DerivedData/aslan-browser-*/Build/Products/Debug/aslan-browser.app
+open "$(ls -td ~/Library/Developer/Xcode/DerivedData/aslan-browser-*/Build/Products/Debug/aslan-browser.app | head -1)"
 sleep 2
 aslan status
 ```

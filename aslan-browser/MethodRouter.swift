@@ -33,6 +33,8 @@ class MethodRouter {
             return try await handleGetAccessibilityTree(params)
         case "click":
             return try await handleClick(params)
+        case "uploadFile":
+            return try await handleUploadFile(params)
         case "fill":
             return try await handleFill(params)
         case "select":
@@ -59,6 +61,10 @@ class MethodRouter {
             return handleTabList(params)
         case "session.create":
             return handleSessionCreate(params)
+        case "session.use":
+            return try handleSessionUse(params)
+        case "session.list":
+            return handleSessionList(params)
         case "session.destroy":
             return try handleSessionDestroy(params)
         case "batch":
@@ -117,14 +123,49 @@ class MethodRouter {
         }
     }
 
+    private func handleUploadFile(_ params: [String: Any]?) async throws -> [String: Any] {
+        let tab = try resolveTab(params)
+        guard let selector = params?["selector"] as? String else {
+            throw RPCError.invalidParams("Missing required param: selector")
+        }
+        if let path = params?["path"] as? String {
+            return try await tab.uploadFileViaOpenPanel(target: selector, paths: [path])
+        }
+        if let paths = params?["paths"] as? [String] {
+            return try await tab.uploadFileViaOpenPanel(target: selector, paths: paths)
+        }
+        throw RPCError.invalidParams("Missing required param: path or paths")
+    }
+
     private func handleScreenshot(_ params: [String: Any]?) async throws -> [String: Any] {
         let tab = try resolveTab(params)
 
         let quality = params?["quality"] as? Int ?? 70
         let width = params?["width"] as? Int ?? 1440
+        let format = params?["format"] as? String ?? "jpeg"
+        let viewportWidth = params?["viewportWidth"] as? Int
+        let viewportHeight = params?["viewportHeight"] as? Int
+        let fullPage = params?["fullPage"] as? Bool ?? false
 
-        let base64 = try await tab.screenshot(quality: quality, width: width)
-        return ["data": base64]
+        guard format == "jpeg" || format == "png" else {
+            throw RPCError.invalidParams("format must be \"jpeg\" or \"png\"")
+        }
+        if fullPage && viewportHeight != nil {
+            throw RPCError.invalidParams("fullPage and viewportHeight are mutually exclusive")
+        }
+        if let w = viewportWidth, !(1...7680).contains(w) {
+            throw RPCError.invalidParams("viewportWidth must be between 1 and 7680")
+        }
+        if let h = viewportHeight, !(1...BrowserTab.maxFullPageHeight).contains(h) {
+            throw RPCError.invalidParams("viewportHeight must be between 1 and \(BrowserTab.maxFullPageHeight)")
+        }
+
+        let shot = try await tab.captureScreenshot(
+            quality: quality, width: width, format: format,
+            viewportWidth: viewportWidth, viewportHeight: viewportHeight, fullPage: fullPage
+        )
+        // format/width/height let clients detect an app too old to honor the new params.
+        return ["data": shot.base64, "format": format, "width": shot.width, "height": shot.height]
     }
 
     private func handleGetTitle(_ params: [String: Any]?) async throws -> [String: Any] {
@@ -302,15 +343,30 @@ class MethodRouter {
     private func handleSessionCreate(_ params: [String: Any]?) -> [String: Any] {
         let name = params?["name"] as? String
         let sessionId = tabManager.createSession(name: name)
-        return ["sessionId": sessionId]
+        return ["sessionId": sessionId, "name": name ?? sessionId]
+    }
+
+    private func handleSessionUse(_ params: [String: Any]?) throws -> [String: Any] {
+        guard let name = params?["name"] as? String, !name.isEmpty else {
+            throw RPCError.invalidParams("Missing required param: name")
+        }
+        let sessionId = tabManager.getOrCreateSession(name: name)
+        return ["sessionId": sessionId, "name": name]
+    }
+
+    private func handleSessionList(_ params: [String: Any]?) -> [String: Any] {
+        return ["sessions": tabManager.listSessions()]
     }
 
     private func handleSessionDestroy(_ params: [String: Any]?) throws -> [String: Any] {
-        guard let sessionId = params?["sessionId"] as? String else {
+        guard let idOrName = (params?["sessionId"] as? String) ?? (params?["name"] as? String) else {
             throw RPCError.invalidParams("Missing required param: sessionId")
         }
+        guard let sessionId = tabManager.resolveSessionId(idOrName) else {
+            throw BrowserError.sessionNotFound(idOrName)
+        }
         let closedTabs = try tabManager.destroySession(id: sessionId)
-        return ["ok": true, "closedTabs": closedTabs]
+        return ["ok": true, "sessionId": sessionId, "closedTabs": closedTabs]
     }
 
     // MARK: - Learn Mode
