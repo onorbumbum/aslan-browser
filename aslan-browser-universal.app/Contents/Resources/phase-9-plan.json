@@ -1,0 +1,137 @@
+{
+  "metadata": {
+    "description": "Phase 9: CLI — token-efficient agent interface for Aslan Browser",
+    "projectRoot": "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser",
+    "sdkDir": "sdk/python",
+    "skillDir": "skills/aslan-browser",
+    "socketPath": "/tmp/aslan-browser.sock",
+    "stateFile": "/tmp/aslan-cli.json",
+    "cliEntryPoint": "sdk/python/aslan_browser/cli.py",
+    "phase": 9
+  },
+  "workItems": [
+    {
+      "id": "cli-infrastructure",
+      "status": "done",
+      "description": "Create cli.py skeleton — argparse parser, connection helper, state file management, output formatting, entry point. Only the 'status' command. Update pyproject.toml with [project.scripts] entry.",
+      "dependsOn": [],
+      "filesToCreate": [
+        "sdk/python/aslan_browser/cli.py"
+      ],
+      "filesToModify": [
+        "sdk/python/pyproject.toml"
+      ]
+    },
+    {
+      "id": "cmd-navigation",
+      "status": "done",
+      "description": "Add nav, back, forward, reload commands to cli.py.",
+      "dependsOn": [
+        "cli-infrastructure"
+      ],
+      "filesToModify": [
+        "sdk/python/aslan_browser/cli.py"
+      ]
+    },
+    {
+      "id": "cmd-reading",
+      "status": "done",
+      "description": "Add tree, title, url, text, eval commands to cli.py.",
+      "dependsOn": [
+        "cli-infrastructure"
+      ],
+      "filesToModify": [
+        "sdk/python/aslan_browser/cli.py"
+      ]
+    },
+    {
+      "id": "cmd-interaction",
+      "status": "done",
+      "description": "Add click, fill, select, key, scroll commands to cli.py.",
+      "dependsOn": [
+        "cli-infrastructure"
+      ],
+      "filesToModify": [
+        "sdk/python/aslan_browser/cli.py"
+      ]
+    },
+    {
+      "id": "cmd-screenshot",
+      "status": "done",
+      "description": "Add shot command to cli.py.",
+      "dependsOn": [
+        "cli-infrastructure"
+      ],
+      "filesToModify": [
+        "sdk/python/aslan_browser/cli.py"
+      ]
+    },
+    {
+      "id": "cmd-tabs",
+      "status": "done",
+      "description": "Add tabs, tab:new, tab:close, tab:use, tab:wait commands to cli.py.",
+      "dependsOn": [
+        "cli-infrastructure"
+      ],
+      "filesToModify": [
+        "sdk/python/aslan_browser/cli.py"
+      ]
+    },
+    {
+      "id": "cmd-cookies",
+      "status": "done",
+      "description": "Add cookies and set-cookie commands to cli.py.",
+      "dependsOn": [
+        "cli-infrastructure"
+      ],
+      "filesToModify": [
+        "sdk/python/aslan_browser/cli.py"
+      ]
+    },
+    {
+      "id": "cli-reference-doc",
+      "status": "done",
+      "description": "Create CLI_REFERENCE.md — agent-facing cheat sheet for all CLI commands. ~150 lines, self-contained.",
+      "dependsOn": [
+        "cmd-navigation",
+        "cmd-reading",
+        "cmd-interaction",
+        "cmd-screenshot",
+        "cmd-tabs",
+        "cmd-cookies"
+      ],
+      "filesToCreate": [
+        "sdk/python/CLI_REFERENCE.md"
+      ]
+    },
+    {
+      "id": "rewrite-skill",
+      "status": "done",
+      "description": "Rewrite SKILL.md to teach CLI instead of Python SDK. Replace SDK_REFERENCE.md with CLI_REFERENCE.md. Update knowledge/core.md for CLI-specific rules. Target: ~150 lines for SKILL.md (down from 300+).",
+      "dependsOn": [
+        "cli-reference-doc"
+      ],
+      "filesToModify": [
+        "skills/aslan-browser/SKILL.md",
+        "skills/aslan-browser/SDK_REFERENCE.md",
+        "skills/aslan-browser/knowledge/core.md"
+      ]
+    },
+    {
+      "id": "integration-tests",
+      "status": "done",
+      "description": "Create tests/test_cli.py — automated end-to-end tests for the CLI using subprocess.",
+      "dependsOn": [
+        "cmd-navigation",
+        "cmd-reading",
+        "cmd-interaction",
+        "cmd-screenshot",
+        "cmd-tabs",
+        "cmd-cookies"
+      ],
+      "filesToCreate": [
+        "sdk/python/tests/test_cli.py"
+      ]
+    }
+  ]
+}

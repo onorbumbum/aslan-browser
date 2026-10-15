@@ -27,7 +27,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var tabManager: TabManager?
     private var socketServer: SocketServer?
 
-    private let socketPath = "/tmp/aslan-browser.sock"
+    private let socketPath = ProcessInfo.processInfo.environment["ASLAN_SOCKET_PATH"] ?? "/tmp/aslan-browser.sock"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSLog("[aslan-browser] launched (hidden: \(isHidden))")
@@ -75,6 +75,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(NSMenuItem(title: "Quit Aslan Browser", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appMenuItem.submenu = appMenu
 
+        // ── File menu ──
+        let fileMenuItem = NSMenuItem()
+        mainMenu.addItem(fileMenuItem)
+        let fileMenu = NSMenu(title: "File")
+        fileMenu.addItem(NSMenuItem(title: "New Tab", action: #selector(newTab), keyEquivalent: "t"))
+        fileMenu.addItem(NSMenuItem(title: "New Window", action: #selector(newWindow), keyEquivalent: "n"))
+        fileMenu.addItem(NSMenuItem.separator())
+        fileMenu.addItem(NSMenuItem(title: "Close Tab", action: #selector(closeCurrentTab), keyEquivalent: "w"))
+        fileMenuItem.submenu = fileMenu
+
         // ── Edit menu ──
         let editMenuItem = NSMenuItem()
         mainMenu.addItem(editMenuItem)
@@ -95,16 +105,62 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewMenu.addItem(NSMenuItem(title: "Focus Address Bar", action: #selector(focusAddressBar), keyEquivalent: "l"))
         viewMenuItem.submenu = viewMenu
 
+        // ── History menu ──
+        let historyMenuItem = NSMenuItem()
+        mainMenu.addItem(historyMenuItem)
+        let historyMenu = NSMenu(title: "History")
+        historyMenu.addItem(NSMenuItem(title: "Back", action: #selector(goBackInActiveTab), keyEquivalent: "["))
+        historyMenuItem.submenu = historyMenu
+
         NSApp.mainMenu = mainMenu
         NSLog("[aslan-browser] Main menu set with \(NSApp.mainMenu?.items.count ?? 0) items")
     }
 
-    @objc private func focusAddressBar() {
-        // Find the BrowserTab that owns the current key window
-        guard let keyWindow = NSApp.keyWindow else { return }
-        if let tab = tabManager?.tabForWindow(keyWindow) {
+    private var currentTab: BrowserTab? {
+        // Key/main first; a popup panel may be key, so fall back to the frontmost visible browser window.
+        let candidates = [NSApp.keyWindow, NSApp.mainWindow].compactMap { $0 }
+            + NSApp.orderedWindows.filter(\.isVisible)
+        for window in candidates {
+            if let tab = tabManager?.tabForWindow(window) { return tab }
+        }
+        return nil
+    }
+
+    @objc private func newTab() {
+        guard let tabManager else { return }
+        // With no browser window to attach to, fall back to a standalone window.
+        let host = currentTab?.window
+        let size = host?.contentView?.frame.size
+        let id = tabManager.createTab(
+            width: size.map { Int($0.width) } ?? 1440,
+            height: size.map { Int($0.height) } ?? 900,
+            hidden: false,
+            tabbedWith: host
+        )
+        NSLog("[aslan-browser] New tab \(id) (tabbed: \(host != nil))")
+    }
+
+    @objc private func newWindow() {
+        guard let tabManager else { return }
+        let id = tabManager.createTab(hidden: false)
+        if let tab = try? tabManager.getTab(id: id) {
+            tab.window.makeKeyAndOrderFront(nil)
             tab.focusURLBar()
         }
+    }
+
+    @objc private func closeCurrentTab() {
+        guard let tab = currentTab else { return }
+        tab.window.performClose(nil)
+    }
+
+    @objc private func goBackInActiveTab() {
+        currentTab?.goBackFromUI()
+    }
+
+    @objc private func focusAddressBar() {
+        // Find the BrowserTab that owns the current key window
+        currentTab?.focusURLBar()
     }
 
     @objc private func showAboutPanel() {

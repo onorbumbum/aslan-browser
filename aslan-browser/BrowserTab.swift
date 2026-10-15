@@ -21,6 +21,8 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
     weak var learnRecorder: LearnRecorder?
     private var urlField: NSTextField?
     private var goButton: NSButton?
+    private var backButton: NSButton?
+    private var canGoBackObservation: NSKeyValueObservation?
     private var statusBar: NSTextField?
     private var statusBarHeightConstraint: NSLayoutConstraint?
     private var recLabel: NSTextField?
@@ -84,6 +86,9 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
             defer: false
         )
         win.title = tabId
+        // Agent-created windows stay standalone; TabManager opts a window into
+        // native tabbing only for user-initiated File ▸ New Tab.
+        win.tabbingMode = .disallowed
 
         // Container with URL bar + webView
         let container = NSView(frame: frame)
@@ -96,6 +101,9 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         urlBar.font = NSFont.systemFont(ofSize: 13)
         urlBar.bezelStyle = .roundedBezel
         urlBar.translatesAutoresizingMaskIntoConstraints = false
+        // A long URL must never push the window wider than its frame.
+        urlBar.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        urlBar.lineBreakMode = .byTruncatingTail
 
         wv.translatesAutoresizingMaskIntoConstraints = false
 
@@ -109,11 +117,21 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         statusBar.isBezeled = false
         statusBar.lineBreakMode = .byTruncatingMiddle
         statusBar.translatesAutoresizingMaskIntoConstraints = false
+        statusBar.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         statusBar.isHidden = true
         self.statusBar = statusBar
 
         let statusBarHeight = statusBar.heightAnchor.constraint(equalToConstant: 0)
         self.statusBarHeightConstraint = statusBarHeight
+
+        // Back button left of the URL bar
+        let backBtn = NSButton(frame: .zero)
+        backBtn.image = NSImage(systemSymbolName: "chevron.left", accessibilityDescription: "Back")
+        backBtn.bezelStyle = .texturedRounded
+        backBtn.toolTip = "Back (⌘[)"
+        backBtn.isEnabled = false
+        backBtn.translatesAutoresizingMaskIntoConstraints = false
+        self.backButton = backBtn
 
         // Go/Stop button next to URL bar
         let goBtn = NSButton(title: "→", target: nil, action: nil)
@@ -141,6 +159,7 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         noteBtn.isHidden = true
         self.addNoteButton = noteBtn
 
+        container.addSubview(backBtn)
         container.addSubview(urlBar)
         container.addSubview(recLabel)
         container.addSubview(noteBtn)
@@ -158,7 +177,12 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
 
         NSLayoutConstraint.activate([
             urlBar.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
-            urlBar.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
+            backBtn.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
+            backBtn.centerYAnchor.constraint(equalTo: urlBar.centerYAnchor),
+            backBtn.widthAnchor.constraint(equalToConstant: 36),
+            backBtn.heightAnchor.constraint(equalToConstant: 28),
+
+            urlBar.leadingAnchor.constraint(equalTo: backBtn.trailingAnchor, constant: 4),
             urlBar.heightAnchor.constraint(equalToConstant: 28),
 
             recLabel.centerYAnchor.constraint(equalTo: goBtn.centerYAnchor),
@@ -200,6 +224,10 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         urlBar.action = #selector(urlFieldAction(_:))
         self.urlField = urlBar
 
+        // Wire up Back button after super.init()
+        backBtn.target = self
+        backBtn.action = #selector(backButtonAction(_:))
+
         // Wire up Go button after super.init()
         goBtn.target = self
         goBtn.action = #selector(goButtonAction(_:))
@@ -225,6 +253,12 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
             Task { @MainActor in
                 self?.updateURLField()
                 self?.updateWindowTitle()
+            }
+        }
+        canGoBackObservation = webView.observe(\.canGoBack, options: [.initial, .new]) { [weak self] wv, _ in
+            let canGoBack = wv.canGoBack
+            Task { @MainActor in
+                self?.backButton?.isEnabled = canGoBack
             }
         }
         titleObservation = webView.observe(\.title, options: [.new]) { [weak self] _, _ in
@@ -354,6 +388,15 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         urlField?.stringValue = webView.url?.absoluteString ?? ""
     }
 
+    @objc private func backButtonAction(_ sender: Any?) {
+        goBackFromUI()
+    }
+
+    /// User-initiated back (toolbar button / ⌘[). Unlike `goBack()` it doesn't wait for the load.
+    func goBackFromUI() {
+        if webView.canGoBack { webView.goBack() }
+    }
+
     @objc private func goButtonAction(_ sender: NSButton) {
         if isLoading {
             webView.stopLoading()
@@ -400,6 +443,8 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         urlObservation = nil
         titleObservation?.invalidate()
         titleObservation = nil
+        canGoBackObservation?.invalidate()
+        canGoBackObservation = nil
         onEvent = nil
         onWindowClose = nil
         navigationContinuation = nil

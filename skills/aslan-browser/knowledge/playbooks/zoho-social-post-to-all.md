@@ -90,9 +90,9 @@ Click the media/image icon in the composer footer:
 aslan click "#zs-newpost-composer-footer-option-media"
 ```
 
-Wait for the media picker dialog to appear:
+Do NOT use `aslan wait --idle` after this click — it causes aborts. Instead, verify the file input is in the DOM:
 ```bash
-aslan wait --idle
+aslan eval "return document.querySelector('#np-browsemedia') ? 'found' : 'not found'"
 ```
 
 If the media picker shows a previously selected image from a prior session, remove it first (click the × on the thumbnail at the bottom of the picker) before uploading.

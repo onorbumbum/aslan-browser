@@ -14,15 +14,31 @@
 		</data>
 		<key>Resources/README.md</key>
 		<data>
-		pNVlNCd8CjZsYRlcx1PrUH/ddrs=
+		SBNTJP8t5PjDH83bmIbpZ2GQdnc=
+		</data>
+		<key>Resources/agents.md</key>
+		<data>
+		3xW9Ogphf1jgzETtOVvj3Q6QPnU=
+		</data>
+		<key>Resources/config.md</key>
+		<data>
+		HuK+7gQP+ZSbV/pZ4wcbbgn1aFI=
 		</data>
 		<key>Resources/conventions.md</key>
 		<data>
 		3BF2H4BW+kLfnJlft819HRSMXiE=
 		</data>
+		<key>Resources/index.html</key>
+		<data>
+		v6NOC/urTR6q48p7CX2h9EbxeY4=
+		</data>
 		<key>Resources/notes.md</key>
 		<data>
-		4ps5wcu/uytgquj94nweu7H82uc=
+		j81+HfXc/lI7YOjxqK9iGwlLtIs=
+		</data>
+		<key>Resources/notes.sync-conflict-20260221-080756-BGQU5F6.md</key>
+		<data>
+		5fQwPzhojbE1GY7etakjDtbWjHQ=
 		</data>
 		<key>Resources/phase-1-plan.json</key>
 		<data>
@@ -31,6 +47,18 @@
 		<key>Resources/phase-1-skeleton.md</key>
 		<data>
 		3B8tVsdlHMnRIdO5mJVrIb3lgmU=
+		</data>
+		<key>Resources/phase-10-learn-mode.md</key>
+		<data>
+		zVkCfFKjY3tcUpPU/j1NW5FpzyQ=
+		</data>
+		<key>Resources/phase-10-plan.json</key>
+		<data>
+		kNzAtSQj05rAjxrR25XrT/SzBXo=
+		</data>
+		<key>Resources/phase-10-plan.sync-conflict-20260221-081028-BGQU5F6.json</key>
+		<data>
+		3DBahIK33dr06pQrI4sAR4Oj50g=
 		</data>
 		<key>Resources/phase-2-plan.json</key>
 		<data>
@@ -80,6 +108,26 @@
 		<data>
 		sjm3Ew0fTYvGwSonuJzGKvEiROU=
 		</data>
+		<key>Resources/phase-8-loading-feedback.md</key>
+		<data>
+		al0vn42QzdjU1eD8zIfWwaGq5BI=
+		</data>
+		<key>Resources/phase-8-plan.json</key>
+		<data>
+		NDbYxEzl0M5PoM+rMqsnGOCwxZ0=
+		</data>
+		<key>Resources/phase-9-cli.md</key>
+		<data>
+		VT92hx5cAtQp3mxS/Jzo0RH3Fbs=
+		</data>
+		<key>Resources/phase-9-plan.json</key>
+		<data>
+		wvmIeoe6JLskakfDnFe/iS+LiTU=
+		</data>
+		<key>Resources/plugins.md</key>
+		<data>
+		XQjxqOEqvCJcE/hxAsrmTnNDZFs=
+		</data>
 		<key>Resources/prd.md</key>
 		<data>
 		kox/myb8kXgAnKFUHNNHdIjPfJQ=
@@ -90,7 +138,7 @@
 		</data>
 		<key>Resources/swift-nio_NIOPosix.bundle/Contents/Info.plist</key>
 		<data>
-		neIrCFNjBiKOjckEDi0JcD0dYkc=
+		FFGxZzMKUSAM9ed5F4hqWsx3nRw=
 		</data>
 		<key>Resources/swift-nio_NIOPosix.bundle/Contents/Resources/PrivacyInfo.xcprivacy</key>
 		<data>
@@ -126,7 +174,21 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			AsUU7ojPFYLWYD3xqHsXRdk/0CVVEsOYLQanlu7yWCQ=
+			GVSY8cU3X/W23AN21BN4gbOY/C7QCyDvLvy8TozNxNA=
+			</data>
+		</dict>
+		<key>Resources/agents.md</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			lwOxdfmeaLjuzOht+g/5hf5hxfBfCWUGqv8FS5b8ZAM=
+			</data>
+		</dict>
+		<key>Resources/config.md</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			IA7L076OU+WZ0MezUHS8moYNcijytELd5qxo+dkwpjs=
 			</data>
 		</dict>
 		<key>Resources/conventions.md</key>
@@ -136,11 +198,25 @@
 			oqUa53WoodBCZjKiP1X3kBi4LWbrgUhJcbzmya1zA4s=
 			</data>
 		</dict>
+		<key>Resources/index.html</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			X4tUDdQg5ZLgaWmba9QyU1ZhLcl9sHrsnwjoreNXmNQ=
+			</data>
+		</dict>
 		<key>Resources/notes.md</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			yfeyJ08D4foxEaVziEnONKc4akTBl320Mi+RNOfx5D0=
+			NX17xOBLhdfx5I1SdscO001ob4ByWRankLk/B3goGNU=
+			</data>
+		</dict>
+		<key>Resources/notes.sync-conflict-20260221-080756-BGQU5F6.md</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			dApByWu/zQHuHkACsaU0zWmtJVqPk/Yl1nEjWQZbX90=
 			</data>
 		</dict>
 		<key>Resources/phase-1-plan.json</key>
@@ -155,6 +231,27 @@
 			<key>hash2</key>
 			<data>
 			15Y5sC/Md2ywgJn4DWPMYXCWQv2fgbwsRL3mJR38Yro=
+			</data>
+		</dict>
+		<key>Resources/phase-10-learn-mode.md</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			GWGhS9GQue/QpEXk3tPyvrqOJqbmJIz8q0/ucDO10j0=
+			</data>
+		</dict>
+		<key>Resources/phase-10-plan.json</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			fTPUD0uLwZTpH0iHigyZQsA8UV1ZLL9S7d6uVdEeRtU=
+			</data>
+		</dict>
+		<key>Resources/phase-10-plan.sync-conflict-20260221-081028-BGQU5F6.json</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			3ZtLm0CPTWhRmVxgqknFjjo9O+nccd0SNEsZ74oZnH0=
 			</data>
 		</dict>
 		<key>Resources/phase-2-plan.json</key>
@@ -241,6 +338,41 @@
 			Rf6NXL6qvONmsSiDS71XGD343EL1NlIwAjH/7dXY6iM=
 			</data>
 		</dict>
+		<key>Resources/phase-8-loading-feedback.md</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			gCMD80hSRc1WvfU6JS1U1NoA9ieiwJY7RP4TvIUBHb0=
+			</data>
+		</dict>
+		<key>Resources/phase-8-plan.json</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			q5ySggGHfU66Bm2Uqs7ZYVGBSm/BwlNpZPWdsvSK2po=
+			</data>
+		</dict>
+		<key>Resources/phase-9-cli.md</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			UEUE1nUajvn3e8uT54tcgi6wshZ7Gob01Fck43Y8s+4=
+			</data>
+		</dict>
+		<key>Resources/phase-9-plan.json</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			XxeCrqxRvmE4VWY3XO6m7gAI4ksaJ4BfSS2cgz8sTNU=
+			</data>
+		</dict>
+		<key>Resources/plugins.md</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			I1I24RUDhkssh5hGZoPlFMJt5/77F8VwuNsZ1Bky/3E=
+			</data>
+		</dict>
 		<key>Resources/prd.md</key>
 		<dict>
 			<key>hash2</key>
@@ -259,7 +391,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			rjE7xIYwAoX792PIKNyIUENoAtJrFfYQR/RQsGqVHa4=
+			abYW7tA4kVvFtDGBexFzC9ZTgNz270guZ3CAUFxbkLY=
 			</data>
 		</dict>
 		<key>Resources/swift-nio_NIOPosix.bundle/Contents/Resources/PrivacyInfo.xcprivacy</key>

@@ -80,7 +80,7 @@ class TabManager {
     // MARK: - Tabs
 
     @discardableResult
-    func createTab(width: Int = 1440, height: Int = 900, hidden: Bool? = nil, sessionId: String? = nil) -> String {
+    func createTab(width: Int = 1440, height: Int = 900, hidden: Bool? = nil, sessionId: String? = nil, tabbedWith host: NSWindow? = nil) -> String {
         let tabId = "tab\(nextId)"
         nextId += 1
 
@@ -97,6 +97,14 @@ class TabManager {
             try? self?.closeTab(id: tabId)
         }
         tab.sessionId = sessionId
+        if let host {
+            // User-initiated New Tab: join the host window's native tab group.
+            host.tabbingMode = .preferred
+            tab.window.tabbingMode = .preferred
+            host.addTabbedWindow(tab.window, ordered: .above)
+            tab.window.makeKeyAndOrderFront(nil)
+            tab.focusURLBar()
+        }
         tab.learnRecorder = learnRecorder
         tabs[tabId] = tab
 

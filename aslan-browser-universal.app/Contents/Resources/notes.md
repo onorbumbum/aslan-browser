@@ -528,3 +528,151 @@ The full dentist search flow demonstrated the Phase 7 design working end-to-end:
 5. `tab.list(sessionId)` → confirms only the right tabs are in scope
 
 Total socket calls for opening + reading 6 dentist pages: **5 calls** (create session, scrape Google, create 6 tabs, batch navigate, batch read). Without batch that would be 14+ sequential calls.
+
+---
+
+## Phase 8 — Loading Feedback
+
+**Status:** Complete ✅
+
+### Changes
+- Loading state tracking via `isLoading` property and WKNavigationDelegate hooks
+- Firefox-style status bar at bottom of window (appears during loading, shows URL)
+- Go/Stop button next to URL field ("→" idle, "✕" loading)
+- URL field text grays out during loading (`.tertiaryLabelColor`)
+- API-initiated navigation (JSON-RPC) also triggers all visual feedback immediately
+
+### Implementation Details
+
+1. **Status bar uses toggling height constraint** — Instead of just `isHidden`, the status bar height constraint toggles between 0 and 20. This ensures the WKWebView reclaims the 20px when the status bar is hidden, since Auto Layout still reserves space for hidden views with active constraints.
+
+2. **Go button wired after `super.init()`** — Same pattern as the URL field. Button is created before `super.init()` with nil target/action, then `target = self` and `action = #selector(goButtonAction(_:))` are set after.
+
+3. **`didStartProvisionalNavigation` is nonisolated** — Matches the pattern of existing WKNavigationDelegate methods. Dispatches to MainActor via `Task { @MainActor in }`.
+
+4. **Loading state set in `navigate()` before `webView.load()`** — For API-initiated navigation, `isLoading` is set to true and `updateLoadingUI()` called before the switch/load block. This ensures the UI updates immediately without waiting for the `didStartProvisionalNavigation` delegate callback.
+
+5. **Loading UI is separate from readiness tracking** — `isLoading` is purely for visual feedback. The readiness system (`didFinishNavigation`, `domStable`, `networkIdle`, `readyStateComplete`) remains unchanged and is used by `waitForIdle`.
+
+### Files Modified
+- `aslan-browser/BrowserTab.swift` — All changes in this single file
+
+---
+
+## Phase 9 — CLI
+
+**Status:** Complete ✅
+
+### Changes
+- Added `aslan` CLI tool (sdk/python/aslan_browser/cli.py, ~630 lines)
+- Entry point via pyproject.toml [project.scripts]
+- State file at /tmp/aslan-cli.json tracks current tab
+- 28 commands: status, source, nav, back, forward, reload, tree, title, url, text, html, eval, click, fill, type, select, key, scroll, wait, upload, shot, tabs, tab:new, tab:close, tab:use, tab:wait, cookies, set-cookie
+- CLI_REFERENCE.md — agent-facing cheat sheet (~190 lines)
+- Rewrote SKILL.md to teach CLI instead of Python SDK (~108 lines, down from ~300+)
+- Updated knowledge/core.md for CLI-specific gotchas
+- Integration tests in tests/test_cli.py (18 tests)
+
+### Token Impact
+- Per-interaction: ~200 tokens → ~30 tokens (85% reduction)
+- Skill context: ~5,000 tokens → ~2,600 tokens (~48% reduction)
+
+### Design Decisions
+1. **`auto_session=False` for CLI** — CLI is stateless per call. No session creation/teardown overhead. State tracked via `/tmp/aslan-cli.json` (current tab only).
+2. **Tab not found auto-recovery** — if current tab doesn't exist, reset to tab0 and retry once.
+3. **Compact output by default** — tree prints one line per node, nav prints title+URL. `--json` flag for programmatic access.
+4. **Zero new dependencies** — pure Python, wraps existing AslanBrowser SDK client.
+5. **`aslan upload` added after initial implementation** — file upload via DataTransfer API was the one operation that still required Python SDK boilerplate (base64 string too large for shell arg). Now fully CLI: `aslan upload /path/to/file.jpg`. Generic — works on any site with `input[type=file]`.
+6. **`aslan type` — universal text input** — auto-detects contenteditable vs input/textarea. Uses `execCommand("insertText")` for contenteditable, `.value` + input/change events for regular inputs. Eliminates the #1 eval workaround across LinkedIn, Facebook, Instagram, Notion.
+7. **`aslan html` — page HTML** — like `text` but returns innerHTML. Supports `--selector` to target specific elements. Eliminates the `aslan eval "return document.body.innerHTML..."` pattern.
+8. **`aslan wait --idle/--load`** — wait for page readiness after click-triggered navigation. Polls `__agent._networkIdle` and `__agent._domStable` (idle) or `document.readyState` (load). Eliminates unreliable `sleep` calls.
+
+---
+
+## Post-Phase — Popup / OAuth Support + Cmd+L
+
+**Status:** Complete ✅
+
+### Changes
+- **WKUIDelegate** implemented on BrowserTab — handles `window.open()`, `target="_blank"`, and OAuth popups
+- **Popup windows** open in NSPanel sharing parent's WKProcessPool (critical for `window.opener.postMessage`)
+- **JS alert/confirm/prompt** handled via native NSAlert dialogs
+- **Cmd+L** focuses the address bar (View menu → Focus Address Bar)
+- **`javaScriptCanOpenWindowsAutomatically = true`** on WKWebViewConfiguration
+
+### Popup Implementation Gotchas
+
+1. **Do NOT call `popupWebView.load()` in `createWebViewWith`** — Apple docs say WebKit auto-loads the request when you return the WKWebView. Calling `.load()` manually double-loads and breaks OAuth redirect chains (popup goes white after account selection).
+
+2. **Do NOT set `translatesAutoresizingMaskIntoConstraints = false` on popup contentView** — NSWindow manages contentView sizing via autoresizing mask. Setting this to false can cause zero-size rendering.
+
+3. **Must retain popup's navigation delegate synchronously** — `WKWebView.navigationDelegate` is a weak reference. If the delegate is a local variable in `createWebViewWith` (which is `nonisolated`), it gets deallocated before async `Task { @MainActor in }` runs. Use `MainActor.assumeIsolated {}` to retain it immediately.
+
+4. **`window.opener` works correctly** — Confirmed via logging that `window.opener` is `true` throughout the entire Google OAuth redirect chain (AccountChooser → ServiceLogin → InteractiveLogin → consent → gsi/transform). The provided `WKWebViewConfiguration` shares the process pool automatically.
+
+5. **Google OAuth uses `redirect_uri=gis_transform` with `response_mode=form_post`** — The popup navigates through ~8 redirects within `accounts.google.com`, ending at `/gsi/transform` which posts the token back to the opener via `postMessage`.
+
+### Debugging
+
+- Popup navigation logs write to `/tmp/aslan-popup.log` (NSLog doesn't show in `log show` for this app).
+- Each popup navigation step (decidePolicyFor, didStartProvisional, didFinish, didFail) is logged with URL and status.
+- `window.opener` state is checked and logged on every `didFinish`.
+
+### Files Modified
+- `aslan-browser/BrowserTab.swift` — WKUIDelegate conformance, popup panel creation, PopupNavigationDelegate, focusURLBar(), JS alert/confirm/prompt handlers
+- `aslan-browser/AppDelegate.swift` — View menu with Cmd+L, focusAddressBar action
+- `aslan-browser/TabManager.swift` — tabForWindow() lookup helper
+
+---
+
+## Post-Phase — Native File Upload Dialog
+
+**Status:** Complete ✅
+
+### Problem
+Clicking `<input type="file">` in the browser did nothing — no file picker appeared. WKWebView requires `WKUIDelegate.webView(_:runOpenPanelWith:initiatedByFrame:completionHandler:)` to present the native file dialog. This method was never implemented.
+
+### Fix
+Added `runOpenPanelWith` to BrowserTab's WKUIDelegate section. Presents `NSOpenPanel` with:
+- `allowsMultipleSelection` from `WKOpenPanelParameters`
+- `allowsDirectories` from `WKOpenPanelParameters`
+- Returns selected URLs on OK, `nil` on cancel
+
+### Files Modified
+- `aslan-browser/BrowserTab.swift` — Added `runOpenPanelWith` delegate method
+
+---
+
+## Phase 10 — Learn Mode
+
+**Status:** Complete ✅
+
+### Discoveries
+
+1. **`window.__agent.post()` merges data keys into the message object, overwriting `type`** — The post helper does `msg = { type: messageType }` then iterates data keys and assigns them to `msg`. If the data object contains a `type` key (e.g., `type: "click"`), it overwrites the message type. This means `handleScriptMessage` never sees `"learn.action"` as the type — it sees `"click"` instead.
+
+   **Fix:** Learn JS uses `actionType` instead of `type` for the action-specific type. `BrowserTab.handleScriptMessage` routes on `"learn.action"` (which survives because the data uses `actionType`), then renames `actionType` → `type` in the action data before passing to LearnRecorder.
+
+2. **Recording UI uses swappable trailing constraints** — Two mutually exclusive `NSLayoutConstraint`s on the URL bar's trailing anchor: one pins directly to the Go button (default), the other pins to the REC label (recording active). Toggle via `isActive`. Must deactivate the old constraint before activating the new one to avoid conflicts.
+
+3. **Learn-mode JS must be re-injected after every navigation** — Page reload wipes all JS state. `didFinish` checks if recording is active and calls `startLearnMode()` again. Without this, user actions after the first navigation would not be captured.
+
+4. **`NSButton` target/action must be wired after `super.init()`** — Same pattern as the URL field and Go button. The Add Note button is created before `super.init()` with nil target, then wired to `self` afterward.
+
+### Files Added
+- `aslan-browser/LearnRecorder.swift` — Recording state machine, action storage, screenshot capture
+
+### Files Modified
+- `aslan-browser/Models/BrowserError.swift` — Added `learnModeError` case
+- `aslan-browser/Models/RPCMessage.swift` — Added `RPCError.learnModeError()` factory (code -32005)
+- `aslan-browser/ScriptBridge.swift` — Added `learnModeJS` and `learnModeCleanupJS` static properties
+- `aslan-browser/BrowserTab.swift` — Learn recorder ref, learn.action routing, recording UI (● REC + Add Note), learn JS inject/remove, navigation logging during recording
+- `aslan-browser/TabManager.swift` — Owns LearnRecorder, propagates start/stop to all tabs, auto-inject on new tab, tab lifecycle logging
+- `aslan-browser/MethodRouter.swift` — Wired learn.start, learn.stop, learn.status, learn.note
+- `sdk/python/aslan_browser/client.py` — learn_start(), learn_stop(), learn_status()
+- `sdk/python/aslan_browser/async_client.py` — async learn_start(), learn_stop(), learn_status()
+- `sdk/python/aslan_browser/cli.py` — aslan learn:start/stop/status commands
+- `skills/aslan-browser/SDK_REFERENCE.md` — Added Learn Mode section
+- `skills/aslan-browser/SKILL.md` — Added section 4: Learn Mode teaching flow
+- `skills/aslan-browser/knowledge/core.md` — Added Learn Mode operational notes
+- `sdk/python/tests/test_learn.py` — 8 integration tests (all passing)
