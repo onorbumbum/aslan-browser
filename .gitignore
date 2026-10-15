@@ -10,6 +10,16 @@ skills/aslan-browser/learnings/user.md
 
 # Xcode build
 .build/
+.build-*/
+DerivedData/
+
+# Local credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
 xcuserdata/
 *.xcworkspace/xcuserdata/
 
