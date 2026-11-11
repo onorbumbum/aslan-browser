@@ -3,11 +3,12 @@ Manual Test — Phase 7
 Search Google for "dentists in Arroyo Grande" and open results in tabs.
 """
 
+import os
 import sys
 import time
 import json
 
-sys.path.insert(0, "/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/sdk/python")
+sys.path.insert(0, os.path.expanduser("~/_PROJECTS/aslan-browser/aslan-browser/sdk/python"))
 from aslan_browser import AslanBrowser
 
 

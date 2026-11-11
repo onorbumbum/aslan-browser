@@ -1,5 +1,11 @@
 # Vendasta / Listing Builder
 
+## Current catalog and account search
+
+- Manage Accounts lives at `https://partners.vendasta.com/manage-accounts`; the bare `/businesses/accounts` path returns Page not found. Use its Search textbox and read back its value and results.
+- The product with internal ID `MS` is now called SEO AI. Reseller information is `https://partners.vendasta.com/marketplace/products/MS`; Editions & Pricing shows Standard, Pro and Premium. Pro has six sync platforms and 15 keywords. AI Search Specialist requires Premium, so old Local SEO Pro beta-inclusion notes are not purchase authority.
+- Citation Builder reseller information is `https://partners.vendasta.com/marketplace/products/MS/addon/A-SX5MP2FB2L`. Its monthly price display coexists with yearly-subscription wording. The expanded yearly FAQ explains ongoing maintenance, not minimum payment liability. Check the selected monthly SKU and final order/applicable terms first; neither assume monthly cancellation from the price nor require an annual purchase or separate support letter from FAQ prose alone.
+
 ## Partner account to Listing Builder
 
 - Partner account detail URL: `https://partners.vendasta.com/businesses/accounts/{ACCOUNT_ID}/details`
@@ -13,6 +19,27 @@
   `https://{partner}.pdqs.mobi/edit/account/{ACCOUNT_ID}/app/listing-profile`
 - Citations URL:
   `https://{partner}.pdqs.mobi/edit/account/{ACCOUNT_ID}/app/citations`
+
+## Authenticated support inquiry
+
+- Partner Center's top `help` button opens Help, then `Chat with Vendasta AI` opens the assistant. The assistant's own `menu` button shows chat history; check it before opening a duplicate inquiry. Its `edit` button starts a new chat.
+- Compose in `textarea[placeholder="Type here…"]` and send with `button[aria-label="Send"]`. The URL gains `(inbox:inbox/ai/ASSISTANT-system/chat/{UUID})`, which links the conversation.
+- Ask for a human and a written response when technical confirmation is needed. The assistant offers `Chat with support` and `Create a ticket`. Click Create a ticket once and wait for the explicit submission confirmation; it can take several seconds. Ticket number arrives separately by email. Do not treat an AI answer or an escalation offer alone as a submitted human-support ticket.
+- Generic AI reassurance about sync preservation is not field-mapping documentation. Retain the preservation gate until supported procedures or documentation establish the behavior.
+
+## Unpublished package drafts
+
+- Packages is `https://partners.vendasta.com/marketplace/manage-packages/store`. Remove the Published filter to inspect draft/archived collisions before creating.
+- Create Package → Add items opens the product selector. Listing Builder defaults to Premium; click its nested `.mat-mdc-select-trigger` and select Pro or Standard explicitly. Select its checkbox, then View add-ons and select Citation Builder only when that is the authorized pair. Select returns both chosen items to the editor.
+- Edit total distributes the retail total across the items. Verify the resulting monthly total and wholesale cost before Save as draft. Never click Publish or Buy for draft-only work.
+- Save as draft can leave the URL at `/marketplace/package/create` while the heading becomes Edit Package Draft. Return to the package list and reopen the saved row to resolve the permanent `/marketplace/package/SOL-...` ID and independently verify contents, retail price and draft status. A draft's monthly cost display does not establish cancellation terms or tax-inclusive purchase totals.
+
+## Product cancellation
+
+- From the account detail page, Listing Builder's `more_vert` menu offers `Cancel product`. The dialog asks when Listing Builder **and its add-ons** should be cancelled. Choices include end of current period, Immediately and after a number of renewals.
+- Next asks for a reason. Other requires Additional comments. Save for immediate cancellation opens a second confirmation warning that no refund is issued for remaining time.
+- Confirm once, then reload and verify all product Canceled history entries and the active Products section. Add-ons can disappear before the main product during processing; do not submit separate cancellations based on that transient state.
+- Canceled history can show the current date while Deactivated history shows the previous day. Retain the exact displayed evidence and do not silently equate those dates.
 
 ## Listing Sync interpretation
 
@@ -50,6 +77,11 @@ The shared `listing-coverage-report/scripts/extract-listing-sync.js` currently r
 `return JSON.stringify(Array.from(document.querySelectorAll("table tbody tr")).map(tr=>tr.innerText.trim().split("\n").map(s=>s.trim()).filter(Boolean)).filter(a=>a.length>2))` (first element is the source name).
 
 The Listing Sync headline (`Syncing progress N/51`, Synced or submitted / Sync in progress / Not syncing) counts primary sources plus Additional Sources; the Additional Sources table alone is 42 rows on the Uzunu Pro + Listing Sync Pro setup.
+
+## Activation and saved profile completeness
+
+- Product activation can initiate Citation Builder primary-data submission and Bing/Apple listing processing before Google is connected. Verify saved hours and profile completeness before activation, not only before Google connection.
+- An unconfigured Hours tab can display every day Closed. Open the hours dialog read-only and inspect all seven `button[role=switch]` states to distinguish actual missing hours from a stale summary. Cancel without saving during an audit.
 
 ## Citation Builder data providers
 
@@ -138,7 +170,7 @@ The Listing Sync headline (`Syncing progress N/51`, Synced or submitted / Sync i
 - Service-area input in the create form is the id-less `input.pac-target-input` (the address field is also a pac-target-input but HAS an id). `aslan type` with `input[placeholder="Enter a location"]` hits the address field first — tag the service input with a data attribute instead. The create-form service dropdown ignores synthetic keydown/keyup, `aslan key`, synthetic mouse events on `.pac-item`, and stale a11y option refs. The a11y tree listbox labels also go stale after the first selection (shows the previous city). Practical workaround: select the primary city only (fresh tree, `aslan click` the option ref works the first time), then add the rest in Listing Builder where the ArrowDown(40)+Enter(13) trick works.
 - Every successful Google place selection rebuilds the form section and reassigns all `mat-input-N` ids — re-scan labels after each selection before filling the next field.
 - Listing Builder edition on the order form: the Listing Builder row has an edition combobox; click its `.mat-mdc-select-trigger` to open, choose `Pro` (wholesale $12.00/mo). SM-template products: Listing Builder | Pro + Citation Builder ($5.00/mo) + Listing Sync Pro (Monthly) ($21.25/mo).
-- Order flow: `Activate` on the account details page drafts an order. NEVER click `Submit for customer approval` (emails the client) — use `Process order` → Confirm dialog. Activation history then shows "Activated by <partner user>".
+- Order flow: `Activate` or `Create order` on account details drafts an order. NEVER click `Submit for customer approval`, which emails the client. Treat `Process order` as the final purchase action: it can submit immediately with no Confirm dialog. Verify all spending and applicable-term gates before clicking it. Activation history then shows "Activated by <partner user>". Order details defaults Contract Duration to 1 year; that field is explicitly record-keeping only, not a cancellation or product-term guarantee.
 - Hours dialog toggles are `button[role=switch]` with `aria-checked` (no input checkbox inside; index 0 = Sunday). `Opens at`/`Closes at` accept `aslan fill` with `7:00 AM`-style strings. Same dialog in Listing Builder Business Profile: inputs are `mat-input-N` pairs per open day (Mon first); fill, click the switch to close a day, dialog `Save`, then the page `Save` outside the dialog. Partner Center `/edit` Hours tab reads the same record, so it is a second verification point.
 - Keyword Tracking Add Keywords dialog: rows are plain inputs; fill the last empty input via eval (`value` + `input` event), click `button[aria-label="Add keywords"]` to append a row, footer button `Add Keywords` saves. Success toast: "Keywords updated".
 

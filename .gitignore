@@ -37,3 +37,20 @@ dist/
 .pi/
 .build-x86/
 *.zip
+# Added by mini-migration Phase 2 (never commit these)
+venv/
+.venv/
+node_modules/
+*.env
+.secrets
+.mailchimp*.env
+.netlify/
+.tmp/
+_WORK/**/dist/
+_WORK/**/node_modules/
+_WORK/**/venv/
+.lsp/.cache/
+.clj-kondo/.cache/
+.cpcache/
+*.app/
+.goal/

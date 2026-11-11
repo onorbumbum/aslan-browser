@@ -13,7 +13,7 @@
   - `cover_song`: boolean (optional, only when DistroKid asks)
   - `clean`: boolean (optional, only when DistroKid asks)
 - **album_id**: string — slug form of the album title (e.g. `konbini-at-2am`); matches `.id` in catalog.json
-- **catalog_path**: string — absolute path to catalog.json (lofiall.day default: `/Users/onorbumbum/_SITES/lofiall.day/_scripts/music/catalog.json`)
+- **catalog_path**: string — absolute path to catalog.json (lofiall.day default: `~/_SITES/lofiall.day/_scripts/music/catalog.json`)
 - **songwriter_first**: string
 - **songwriter_last**: string
 - **primary_genre_value**: string
@@ -392,7 +392,7 @@ Verify album name, year, and track count in the confirmation card.
 After confirming success, save the `albumuuid` from the `/new/done/?albumuuid=...` URL and mark the album as `uploaded` in the catalog:
 
 ```bash
-CATALOG="/Users/onorbumbum/_SITES/lofiall.day/_scripts/music/catalog.json"
+CATALOG="~/_SITES/lofiall.day/_scripts/music/catalog.json"
 ALBUM_ID="<album_id>"  # e.g. konbini-at-2am
 DISTROKID_ID="<albumuuid>"
 TMP="$CATALOG.tmp.$$"

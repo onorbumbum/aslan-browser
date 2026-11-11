@@ -17,6 +17,13 @@
 - App creation asks for a business portfolio. Use the explicitly chosen owner portfolio, not a client's portfolio simply because it appears in the list.
 - The final "Create app" can trigger a "Please re-enter your password" dialog. Pause for the user to confirm in the browser. Do not report the app as created while that confirmation is pending.
 
+## Sharing Debugger
+
+- After an authorized Scrape Again, the first read may still show stale properties. Recheck the clean canonical and original shared URL before declaring failure or issuing another refresh.
+- Verify the actual preview image with its loaded natural dimensions, not just og:image text. HTTP 206 can accompany a successful preview.
+- The raw-crawler echo view may return "An error occured while fetching content" even when the debugger preview works.
+- Missing fb:app_id can remain while image, title and description render. Do not invent an app ID or register an app to clear that warning.
+
 ## Browser handling
 
 - Pin the developer tab on each command. The installed CLI expects tab flags after the subcommand, for example `aslan tree --tab tab2`, not before `tree`.

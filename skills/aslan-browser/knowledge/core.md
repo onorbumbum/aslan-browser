@@ -57,11 +57,18 @@ Operational rules for driving Aslan via the `aslan` CLI. Loaded every session.
   a control element before concluding the page's CSS is broken.
 - **Contrast checks:** screenshot, then sample the JPEG with Pillow and compute WCAG ratios
   against the text colour. Faster and more objective than eyeballing text over photography.
+- **Exporting Google Maps photos (canvas viewer):** Maps photo/Street View viewers render to a huge
+  `<canvas>` with no `<img>` — don't crop screenshots. The full-res source is in the network log:
+  `aslan eval 'return JSON.stringify(performance.getEntriesByType("resource").map(e=>e.name).filter(u=>/googleusercontent\\/(gps-cs-s|gpms-cs-s)/.test(u)))'`
+  Verify which URL is the displayed photo by fetching each base in-page with `=s0` (`fetch(base+"=s0")` →
+  `createImageBitmap` → check dimensions) and matching against the `!7iW!8iH` size in the Maps URL.
+  `=s0` returns the original resolution. `curl "<base>=s0" -o out.jpg` works from bash — the signature
+  is embedded in the path, no cookies needed. Size suffixes are freely replaceable on these signed URLs.
 
 ## Launch
 
 - Confirm running: `aslan status` must print "Connected". If it fails → wrong binary or app not running.
-- Launch from DerivedData when it exists, never from `/Applications/`. If DerivedData is absent, inspect current checkout builds before launching: `.build/Build/Products/Release/aslan-browser.app` can be old and lack the Safari-compatible UA. The newer `/Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/.build-user-agent/Build/Products/Debug/aslan-browser.app` supports full Google owner controls. Confirm startup with `aslan status` and inspect `navigator.userAgent`; startup may take longer than two seconds. Never restart a browser with active user work without permission.
+- Launch only `/Applications/aslan-browser.app`, the installed build from `~/_PROJECTS/aslan-browser` (Onur, 2026-10-24: never use the old Aslan browser). Old copies under the repo's `.build*/` directories and DerivedData are stale; never launch or drive them. Confirm the running process path with `ps`, then `aslan status`; startup may take longer than two seconds. Never restart a browser with active user work without permission.
 
 ## Interaction Patterns
 
@@ -101,6 +108,8 @@ Operational rules for driving Aslan via the `aslan` CLI. Loaded every session.
 
 ## Operational Rules
 
+- During OAuth redirects, do not print full URLs or query strings. Read `location.origin + location.pathname` with `aslan eval` instead; callbacks may contain authentication tokens.
+
 - Closing all tabs is fine — socket stays alive, create new tabs as needed
 - To keep tabs open for user review: use `tab0` (survives cleanup) or don't close
 - Multi-line JS in `aslan eval`: use single quotes around the whole script, keep it as compact as possible
@@ -136,6 +145,3 @@ Operational rules for driving Aslan via the `aslan` CLI. Loaded every session.
 
 - If the user is actively browsing (current tab changing between commands), their navigation can land on the tab you were automating. Re-check `aslan tabs` when a command suddenly errors or returns the wrong page, pin every command with `--tab <id>`, and if the user took your tab, take a fresh `tab:new` instead of navigating their tab back.
 
-## Launching when the DerivedData build is missing
-
-- If `~/Library/Developer/Xcode/DerivedData/aslan-browser-*/Build/Products/Debug/aslan-browser.app` does not exist, compare `/Applications/aslan-browser.app/Contents/MacOS/aslan-browser` mtime with the repo's `.build` mtime (`~/_PROJECTS/aslan-browser/aslan-browser/.build`). When they match, the /Applications copy is the current build and is safe to `open`.

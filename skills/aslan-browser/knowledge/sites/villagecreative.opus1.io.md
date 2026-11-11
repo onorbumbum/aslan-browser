@@ -1,5 +1,17 @@
 # Village Creative Opus
 
+## Access checks
+
+- A cached campaign list, even with Load everything results, does not prove current authentication. Verify a freshly opened campaign detail before claiming access is restored; it may instead show Not logged in. A login screen can change while the session is being restored, and a successful detail can be followed by login on later navigation. Let the route settle, pair the current URL/text with a pinned screenshot, and report the latest verified state rather than claiming login persists. Do not request a login-link email without authority.
+
+- The generic "Unable to load" screen can mean a GraphQL API rejection, not lost internet. Check a bounded response status from `https://api.opus1.io/graphql` before changing campaign data. A 403 does not establish a specific cause such as expired login or a WAF block.
+
+## Read-only prospect counts
+
+- `/prospects` has Filters > Date Created Range. Choose Last Month, verify the explicit start/end dates, submit the date picker, then Apply Filters. Wait for card loading to settle before recording column counts; the first render may show zeros.
+- Date Created counts are records across sources, not unique household inquiries, ad-attributed leads or paid enrollments. `/stats/prospect-conversion` has its own filters and default subset; do not treat its initial count as the complete month.
+- After an administrator logs in, `/lead` can redirect to the signed-in client's profile. Do not treat that redirect as the unauthenticated public inquiry experience or log out the administrator to test it.
+
 ## Campaign editing
 
 - Copy a suitable recent campaign instead of creating one from scratch. `Summer Festival 26` is one useful base.
@@ -21,3 +33,4 @@
 - Verify uploaded image rendering and exact client copy in exported HTML after saving and reloading.
 - Send Test Email opens a staff recipient selector. Search with the native input setter, verify the option's exact email, then press Enter to select the focused option. Clicking the option can clear search without selecting it. Multiple staff can be selected. Verify the complete selected set before clicking `#submit-send-campaign-test-email` once. Success toast is `Campaign test email sent successfully`.
 - Do not schedule or send a campaign without explicit approval. Confirm exact recipients before sending test emails.
+- Immediate production sending is inside Schedule Campaign. Check Send now in the modal, verify the message 'This campaign will start processing within minutes' and button 'SCHEDULE CAMPAIGN NOW', then submit once only under send authority. Opus initially reports Scheduled even for Send now; verify Report delivery before claiming completion. Never resubmit because counters are still zero.

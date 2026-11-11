@@ -6,14 +6,14 @@ page open, caption text and video file paths ready.
 
 ## Steps
 
-1. Open the composer: fresh `aslan tree`, click the first `button "Post"`.
+1. Before clicking any media-upload button, verify System Events can inspect `windows` of process `aslan-browser`. If it returns `osascript is not allowed assistive access` with code -25211, stop the upload flow and ask for Accessibility access or manual file selection. Opening the panel first can block all browser commands until a human dismisses it. Then open the composer: fresh `aslan tree`, click the first `button "Post"`.
 2. Fresh tree, click `button "Add a photo or video"`. This opens the NATIVE
    open panel (separate window named `Open`). See knowledge/sites/nextdoor.com.md.
 3. WAIT for the panel via System Events — poll
    `exists window "Open"` of process `aslan-browser` (up to ~12 s). Never send
    keystrokes before it exists; they land on the page instead.
-4. Keystroke `Cmd+Shift+G`, type absolute video path, Return, wait 3 s, Return.
-5. Confirm `window "Open"` is gone (retry Go-to-folder once if not).
+4. Set process `aslan-browser` frontmost and perform `AXRaise` on its `Open` window before `Cmd+Shift+G`. Inspect `text field 1 of sheet 1 of window "Open"`, set the absolute video path, then Return. Confirm the path sheet closed. If the panel remains and `button "Open" of splitter group 1 of window "Open"` is enabled, click that button instead of sending Return blindly.
+5. Confirm `window "Open"` is gone before browser commands. Recheck the actual selected filename and duration in the composer; successful keystrokes alone do not prove file selection.
 6. Confirm "attachment in post" after the panel closes, then poll upload
    readiness. Upload and processing can take over a minute for 65–120 MB files.
    Do not use a fixed settle delay as proof. Wait until the attachment spinner

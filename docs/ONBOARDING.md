@@ -21,7 +21,7 @@ The core product bet is correct: for agents, the accessibility tree is usually a
 ### Build and run
 
 ```bash
-cd /Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser
+cd ~/_PROJECTS/aslan-browser/aslan-browser
 
 xcodebuild build \
   -scheme aslan-browser \
@@ -50,11 +50,11 @@ The app must be running first.
 
 ```bash
 # Python SDK + CLI integration tests
-cd /Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser/sdk/python
+cd ~/_PROJECTS/aslan-browser/aslan-browser/sdk/python
 python3 -m pytest tests/ -v
 
 # Raw socket integration tests
-cd /Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser
+cd ~/_PROJECTS/aslan-browser/aslan-browser
 python3 tests/test_socket.py
 
 # Benchmark

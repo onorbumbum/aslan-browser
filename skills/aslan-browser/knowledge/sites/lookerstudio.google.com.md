@@ -18,6 +18,13 @@
   - Reporting home (list owned/shared reports): `https://lookerstudio.google.com/navigation/reporting`
   - Connector gallery (create a data source): `https://lookerstudio.google.com/datasources/create`
 
+## Inspecting scheduled email delivery
+- In report view, the Share dropdown is the top-bar button with aria-label `More options`; choose `Schedule delivery`.
+- The `Email delivery` dialog shows recipients, subject, message, start date, repeat rule, time and timezone. `Edit schedule` opens fields; use `Cancel` to leave without saving.
+- The delivery dialog's own `More options` menu contains `Delete schedule`. This deletes the delivery schedule, not the report. Do not select it without approval of that exact cancellation. Verify absence by reopening delivery settings after an authorized deletion.
+- Recipient chips may display contact names without email addresses in the DOM. Do not guess the address from the display name.
+- Successful schedule deletion closes the dialog and briefly shows `Schedule deleted`. Reopening Schedule delivery shows `Schedule email delivery for this report` and a new unsaved form with Cancel/Save, rather than `This report is scheduled for email delivery` and Edit schedule. Cancel the default form without saving; its populated defaults are not an existing schedule.
+
 ## Cloning a report for a new client (Make a copy)
 - Full flow: `knowledge/playbooks/lookerstudio-clone-client-report.md`.
 - **Create data sources first** (connector gallery), THEN Make a copy. New sources take ~1 min to appear in the copy picker (propagation lag — reopen the dialog if missing).

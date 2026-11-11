@@ -96,6 +96,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
         editMenu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
         editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(NSMenuItem(title: "Fill Password", action: #selector(fillPassword), keyEquivalent: "\\"))
+        editMenu.addItem(NSMenuItem(title: "Lock Passwords", action: #selector(lockPasswords), keyEquivalent: ""))
         editMenuItem.submenu = editMenu
 
         // ── View menu ──
@@ -152,6 +155,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func closeCurrentTab() {
         guard let tab = currentTab else { return }
         tab.window.performClose(nil)
+    }
+
+    @objc private func fillPassword() {
+        guard let tab = currentTab else { NSSound.beep(); return }
+        tab.fillPasswordFromUI()
+    }
+
+    @objc private func lockPasswords() {
+        PasswordManager.shared.lock()
     }
 
     @objc private func goBackInActiveTab() {

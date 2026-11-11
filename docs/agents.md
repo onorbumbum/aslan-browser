@@ -71,7 +71,7 @@ Determine the appropriate bump level (patch/minor/major) based on the changes.
 Build a single universal binary (arm64 + x86_64) for all Macs:
 
 ```bash
-cd /Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser
+cd ~/_PROJECTS/aslan-browser/aslan-browser
 xcodebuild -project aslan-browser.xcodeproj -scheme aslan-browser \
   -configuration Release ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO build \
   2>&1 | grep -E "error:|BUILD SUCCEEDED|BUILD FAILED"
@@ -113,7 +113,7 @@ cd $DERIVED
 ditto -c -k --sequesterRsrc --keepParent aslan-browser.app /tmp/aslan-browser-X.Y.Z-universal.zip
 
 # Create release (replace X.Y.Z and write appropriate notes)
-cd /Users/onorbumbum/_PROJECTS/aslan-browser/aslan-browser
+cd ~/_PROJECTS/aslan-browser/aslan-browser
 gh release create vX.Y.Z \
   /tmp/aslan-browser-X.Y.Z-universal.zip \
   --title "vX.Y.Z — Short Title" \

@@ -22,6 +22,7 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
     private var urlField: NSTextField?
     private var goButton: NSButton?
     private var backButton: NSButton?
+    private var passwordButton: NSButton?
     private var canGoBackObservation: NSKeyValueObservation?
     private var statusBar: NSTextField?
     private var statusBarHeightConstraint: NSLayoutConstraint?
@@ -133,6 +134,14 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         backBtn.translatesAutoresizingMaskIntoConstraints = false
         self.backButton = backBtn
 
+        // Fill-password button between Back and the URL bar
+        let keyBtn = NSButton(frame: .zero)
+        keyBtn.image = NSImage(systemSymbolName: "key.fill", accessibilityDescription: "Fill Password")
+        keyBtn.bezelStyle = .texturedRounded
+        keyBtn.toolTip = "Fill Password from Bitwarden (⌘\\)"
+        keyBtn.translatesAutoresizingMaskIntoConstraints = false
+        self.passwordButton = keyBtn
+
         // Go/Stop button next to URL bar
         let goBtn = NSButton(title: "→", target: nil, action: nil)
         goBtn.bezelStyle = .texturedRounded
@@ -160,6 +169,7 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         self.addNoteButton = noteBtn
 
         container.addSubview(backBtn)
+        container.addSubview(keyBtn)
         container.addSubview(urlBar)
         container.addSubview(recLabel)
         container.addSubview(noteBtn)
@@ -182,7 +192,12 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
             backBtn.widthAnchor.constraint(equalToConstant: 36),
             backBtn.heightAnchor.constraint(equalToConstant: 28),
 
-            urlBar.leadingAnchor.constraint(equalTo: backBtn.trailingAnchor, constant: 4),
+            keyBtn.leadingAnchor.constraint(equalTo: backBtn.trailingAnchor, constant: 4),
+            keyBtn.centerYAnchor.constraint(equalTo: urlBar.centerYAnchor),
+            keyBtn.widthAnchor.constraint(equalToConstant: 36),
+            keyBtn.heightAnchor.constraint(equalToConstant: 28),
+
+            urlBar.leadingAnchor.constraint(equalTo: keyBtn.trailingAnchor, constant: 4),
             urlBar.heightAnchor.constraint(equalToConstant: 28),
 
             recLabel.centerYAnchor.constraint(equalTo: goBtn.centerYAnchor),
@@ -227,6 +242,9 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
         // Wire up Back button after super.init()
         backBtn.target = self
         backBtn.action = #selector(backButtonAction(_:))
+
+        keyBtn.target = self
+        keyBtn.action = #selector(passwordButtonAction(_:))
 
         // Wire up Go button after super.init()
         goBtn.target = self
@@ -390,6 +408,18 @@ class BrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate
 
     @objc private func backButtonAction(_ sender: Any?) {
         goBackFromUI()
+    }
+
+    @objc private func passwordButtonAction(_ sender: NSButton) {
+        fillPasswordFromUI()
+    }
+
+    /// User-initiated password fill (key button / ⌘\). Never reachable from the agent socket.
+    func fillPasswordFromUI() {
+        let anchor = passwordButton
+        Task { @MainActor in
+            await PasswordManager.shared.fill(in: self, anchor: anchor)
+        }
     }
 
     /// User-initiated back (toolbar button / ⌘[). Unlike `goBack()` it doesn't wait for the load.

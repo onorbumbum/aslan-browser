@@ -12,13 +12,14 @@
 1. Open the account in Partner Center. Read the Listing Builder link's href and navigate through that SSO gateway in the owned tab.
 2. Confirm the business name and address. Click Keyword Tracking. Its route is `/edit/account/{ACCOUNT_ID}/app/local-seo`.
 3. Read current keywords, ranks, update schedule, and the expanded local grid. Extract keywords with `document.querySelectorAll("td.mat-column-keyword")`.
-4. Open Add Keywords to inspect capacity. Do not assume unlimited slots. Uzunu Pro had 15 slots.
+4. Open Add Keywords to inspect capacity. Do not assume unlimited slots. Uzunu Pro had 15 slots. The Santa Maria Listing Builder dialog exposes no pre-save Sync Keyword toggle or initial-default declaration. If approval requires tracking-only behavior verified before save, cancel and stop unless that default can be independently verified. Do not save merely to inspect the per-keyword Settings afterward; that could distribute keywords to publishers. A post-save pilot needs separate approval explicitly covering this risk.
 5. Inspect the page-level Settings dialog for Maps radius and organic full-URL setting. Do not change these incidentally. Radius changes affect competitors and rank comparability.
 6. In Add Keywords, fill the first input. Click `button[aria-label="Add keywords"]`, labeled visually as Add a keyword..., to create another input row. Inspect new input IDs after each addition. Each keyword needs its own row.
 7. Review input values. Click the footer Add Keywords button to save. The inner Add a keyword... button only creates another input row.
 8. Confirm Keywords updated, reload, and extract the persisted keyword list. New keywords show pending dashes rather than immediate ranks.
 
 ## Notes
+- In the approved Santa Maria AG-G6ZLWF6MZ4 single-keyword pilot, both Favorite Keyword and Sync Keyword saved ON by default. The Sync Keyword toggle autosaves when clicked; reload and reopen row Settings to verify aria-checked=false. This does not prove publishers withdrew data sent before disabling. Do not extrapolate tracking-only approval to further additions with temporary sync effects.
 - Maps and organic ranks update weekly; difficulty and volume update monthly.
 - A city-qualified keyword does not expand or relocate the configured local grid. Point rank is not county-wide rank.
 - Preserve existing history unless keyword deletion is approved. Flag misspellings and low-relevance terms for replacement.

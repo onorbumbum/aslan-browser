@@ -8,6 +8,8 @@
 - After clicking a reason, `aslan wait --idle` can finish before the drilldown replaces the overview. Read again until the reason heading and Examples table appear; do not click another reason against stale content.
 - Drilldowns show First detected, affected-page count, example URLs, and last crawl dates. Compare those dates to deploy dates rather than treating the email delivery time as incident onset.
 - The Examples table defaults to 10 rows. Do not claim all affected URLs were inspected when only the first page was read.
+- Drilldowns can leave hidden overview rows in the DOM. A query over all `tr` elements may return both reason rows and Examples rows. Confirm the drilldown heading, then identify URL rows and reconcile their count with the displayed affected count.
+- The report's Last update and example Last crawled dates can lag URL Inspection API's lastCrawlTime. Preserve and label both observations rather than treating them as the same snapshot or as an inconsistency.
 - Do not click Validate fix merely because a current page returns 200. First establish whether the exclusion is intentional and whether all affected examples were corrected.
 
 ## Videos enhancement report (rich-result issues)

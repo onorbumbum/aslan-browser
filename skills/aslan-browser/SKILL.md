@@ -40,13 +40,19 @@ ls knowledge/playbooks/
 aslan status
 ```
 
+Use only the installed build, `/Applications/aslan-browser.app` (installed from `~/_PROJECTS/aslan-browser`). Confirm the running process is that app, not an old `.build*/` or DerivedData copy:
+```bash
+ps -axo command | grep -i "aslan-browser.app/Contents/MacOS" | grep -v grep
+```
+
 If not running:
 ```bash
-pkill -x "aslan-browser" 2>/dev/null; sleep 0.5
-open "$(ls -td ~/Library/Developer/Xcode/DerivedData/aslan-browser-*/Build/Products/Debug/aslan-browser.app | head -1)"
-sleep 2
+open /Applications/aslan-browser.app
+sleep 3
 aslan status
 ```
+
+If an old build is running, ask the user before quitting it (it may hold their logins and tabs), then open `/Applications/aslan-browser.app`.
 
 ---
 
@@ -131,5 +137,5 @@ When the user wants to teach a new task:
 - DO NOT pre-plan multi-step scripts. Drive step by step.
 - DO NOT forget `return` in `aslan eval` scripts.
 - DO NOT use `http://` URLs — ATS blocks them. Always `https://`.
-- DO NOT launch `/Applications/aslan-browser.app` — may be stale.
+- DO NOT launch or drive old builds (`~/_PROJECTS/aslan-browser/aslan-browser/.build*/`, DerivedData). Only `/Applications/aslan-browser.app`.
 - DO NOT skip knowledge loading or compilation.
