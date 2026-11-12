@@ -2,6 +2,8 @@
 
 ## Read-only commerce inspection
 
+- Payment Settings can display promotional Squarespace Payments rates while Stripe remains the primary processor. Those advertised rates do not verify the connected Stripe account's fees. A Taxes screen that offers "Choose a calculation method" with neither Automated nor Manual selected does not verify saved tax rates; do not choose a method or press Continue during a read-only preflight.
+
 - Products & Services > Products separates Physical, Services, Downloads and Gift Cards into tabs. Inspect the relevant tab and its pagination count before declaring a product absent. Service products can show finite inventory as well as unlimited stock.
 - Finance > Payment Settings opens the Selling / Payments settings overlay. A promotion to switch to Squarespace Payments does not mean no processor is connected. Read the existing processor section, which may say Stripe Connected and primary.
 - Do not toggle Enable test mode as an inspection step. The UI warns that it disables the store while enabled.

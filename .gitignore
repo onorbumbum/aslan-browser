@@ -54,3 +54,4 @@ _WORK/**/venv/
 .cpcache/
 *.app/
 .goal/
+.claude/settings.local.json

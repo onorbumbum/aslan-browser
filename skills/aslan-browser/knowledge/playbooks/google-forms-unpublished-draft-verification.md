@@ -17,6 +17,12 @@ Use an authenticated installed Aslan Browser. Have task-specific authority for d
 9. Responses explicitly says `No responses. Publish your form to start accepting responses.` for a new unpublished draft. Record this as publication-state evidence, not merely the presence of a Publish button.
 10. `Link to Sheets` is not proof of an existing response spreadsheet. Do not claim a response destination without checking its actual linkage.
 
+## Publication checks when separately approved
+
+- The Publish dialog may default responders to Specific people. Manage responders opens a same-origin `iframe[title=Content]` sharing dialog. Its General access has separate Editor view and Responder view controls. Change only Responder view to Anyone with the link when approved; keep Editor view Restricted. Wait for Access updated and Done before returning to Publish.
+- In the sharing iframe, a plain `.click()` may not open a menu. Dispatch pointerdown, pointerup and click using the iframe's own window and `view` property. Read the resulting options before selecting.
+- After publication, get the actual `/d/e/.../viewform` URL from Copy responder link. Recheck the response count after a separately approved synthetic submission, label the test clearly, and never delete it without authority.
+
 ## Limits
 
 Do not publish or submit to prove the draft exists. Editor verification does not establish signed-out responder access or submission behavior. Leave old forms and responses untouched unless specifically authorized.

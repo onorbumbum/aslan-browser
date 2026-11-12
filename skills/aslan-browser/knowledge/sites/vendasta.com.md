@@ -27,6 +27,13 @@
 - Ask for a human and a written response when technical confirmation is needed. The assistant offers `Chat with support` and `Create a ticket`. Click Create a ticket once and wait for the explicit submission confirmation; it can take several seconds. Ticket number arrives separately by email. Do not treat an AI answer or an escalation offer alone as a submitted human-support ticket.
 - Generic AI reassurance about sync preservation is not field-mapping documentation. Retain the preservation gate until supported procedures or documentation establish the behavior.
 
+## Google Listing Sync connection
+
+- Open the Google card, then `button[data-action="connect-social-service"]`. OAuth uses the existing Social Reputation app grant. During OAuth, read only `location.origin + location.pathname`, not `aslan tabs` or full URLs.
+- After consent, the location picker groups listings under Google accounts. Expand the correct account, select the unique verified name/address row, and verify its Maps CID against the exact GBP location's API metadata before enabling sync.
+- Connection and sync activation are separate. After selecting a listing, allow the asynchronous connection dialog to render before interacting again. An early click on `Sync to keep accurate` can stack two identical activation dialogs. Activate once, then reload to verify rather than submitting both dialogs.
+- A reload showing Google `Syncing`, the expected Connected Account and no `Sync to keep accurate` button proves activation, not completed publication. Compare full GBP before/after reads for delayed field changes.
+
 ## Unpublished package drafts
 
 - Packages is `https://partners.vendasta.com/marketplace/manage-packages/store`. Remove the Published filter to inspect draft/archived collisions before creating.
