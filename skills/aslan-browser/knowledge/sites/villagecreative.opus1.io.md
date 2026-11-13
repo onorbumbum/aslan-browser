@@ -2,6 +2,8 @@
 
 ## Access checks
 
+- When Onur restores an already-open campaign, do not reload it. For independent server reads without full navigation, locate the existing Apollo client through React fiber context dependencies, then use `client.getObservableQueries()` to find `fullCampaignQuery` or `template` and call that observable's `refetch()`. Return only campaign/template data needed for verification, never tokens or entire context objects. Tab switching alone can retain editor state; it is not proof of a persisted save.
+
 - A cached campaign list, even with Load everything results, does not prove current authentication. Verify a freshly opened campaign detail before claiming access is restored; it may instead show Not logged in. A login screen can change while the session is being restored, and a successful detail can be followed by login on later navigation. Let the route settle, pair the current URL/text with a pinned screenshot, and report the latest verified state rather than claiming login persists. Do not request a login-link email without authority.
 
 - The generic "Unable to load" screen can mean a GraphQL API rejection, not lost internet. Check a bounded response status from `https://api.opus1.io/graphql` before changing campaign data. A 403 does not establish a specific cause such as expired login or a WAF block.
