@@ -27,6 +27,10 @@ return input.value;
 
 Verify success via the API afterwards: `netlify api getSite --data '{"site_id": "..."}'` → `build_settings.repo_branch`.
 
+## Forms submission verification
+
+The form-detail filter menu switches between Spam submissions (`?filter=spam`) and Verified submissions (`?filter=ham`). For an approved single-entry verification, select only the matching entry and click Mark as verified once. Read back that marker in Verified submissions after reload. An empty spam view alone is not proof, and verified status does not prove notification receipt.
+
 ## esmasonmezcom project
 
 - Repo `onorbumbum/esmasonmezcom`, publishes committed `dist/` with empty build command.
