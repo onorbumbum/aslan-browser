@@ -19,7 +19,7 @@
 8. Confirm Keywords updated, reload, and extract the persisted keyword list. New keywords show pending dashes rather than immediate ranks.
 
 ## Notes
-- In the approved Santa Maria AG-G6ZLWF6MZ4 single-keyword pilot, both Favorite Keyword and Sync Keyword saved ON by default. The Sync Keyword toggle autosaves when clicked; reload and reopen row Settings to verify aria-checked=false. This does not prove publishers withdrew data sent before disabling. Do not extrapolate tracking-only approval to further additions with temporary sync effects.
+- In the approved Santa Maria AG-G6ZLWF6MZ4 single-keyword pilot, both Favorite Keyword and Sync Keyword saved ON by default. Both defaults also saved ON in the approved HSM pilot. Each toggle autosave collapses the expanded row and replaces its controls. Wait for the keyword table to return, reopen the exact keyword row, select its `button[role=radio]` whose text includes Settings, then reacquire the switches before changing the second toggle. Reload and reopen row Settings to verify both aria-checked=false. Reload may auto-expand the first row, so inspect its `example-expanded-row` class before clicking expand. This does not prove publishers withdrew data sent before disabling. Do not extrapolate tracking-only approval to further additions with temporary sync effects.
 - Maps and organic ranks update weekly; difficulty and volume update monthly.
 - A city-qualified keyword does not expand or relocate the configured local grid. Point rank is not county-wide rank.
 - Preserve existing history unless keyword deletion is approved. Flag misspellings and low-relevance terms for replacement.
