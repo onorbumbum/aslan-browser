@@ -11,11 +11,8 @@
   community." / "Add a caption (optional)"), "Add a photo or video",
   "Add a location", and a dialog-level "Post" button. `aslan tree` shows it as
   `dialog "create post composer"` with all controls as normal refs.
-- **Media upload uses a NATIVE macOS open panel.** Clicking "Add a photo or
-  video" does not create a usable `input[type=file]` path — it opens a native
-  NSOpenPanel as a SEPARATE window named `Open` on process `aslan-browser`
-  (not a sheet of the main window). While it is open the page's main thread is
-  blocked: every `aslan eval/tree/click` hangs until timeout.
+- For images, inspect the existing `input[data-testid=uploader-fileinput]` before clicking the media button. `aslan upload <path> --selector 'input[data-testid=uploader-fileinput]'` can upload directly. Verify a provider-hosted thumbnail is loaded and attachment spinners are gone. The input may reset to zero files after successful upload, so its length alone is not proof of failure.
+- Clicking "Add a photo or video" can open a native NSOpenPanel as a separate window named `Open` on process `aslan-browser`, not a sheet of the main window. While it is open the page's main thread is blocked, and browser commands can hang. Verify System Events access before opening it.
 - Driving the panel (only after confirming `exists window "Open"` via System
   Events, never blind):
   1. `tell application "aslan-browser" to activate`
