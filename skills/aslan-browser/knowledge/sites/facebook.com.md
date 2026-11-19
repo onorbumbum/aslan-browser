@@ -85,3 +85,9 @@ To create a post on a Facebook Page:
 - Changing Page type: the `Page type` row on `/settings/?tab=pages` ignores `aslan click`; dispatch the full pointer-event sequence on the div whose text starts with "Page type". In the dialog, `aslan click` on the option's wrapper node selects the radio (verify with `input[type=radio]` `.checked`), then pointer-event `Next` → `Confirm`. The Confirm eval may return "JavaScript error" because the dialog unmounts; reload the tab and read the `Page type…` button label to verify. No cost; the category and address are preserved.
 - Graph API place check (toolshed Meta token at `~/.config/toolshed/connections/meta/accounts/onur/token.json`): `/<page-id>?fields=location,place_type,can_checkin,checkins`. `place_type: PLACE` + `can_checkin: true` + lat/lng means Facebook's data is right; consumer search (`/search/places`, the Business Suite composer Location picker, Instagram) can still lag days behind it.
 - Business Suite composer Location picker (`business.facebook.com/latest/composer?asset_id=<page-id>` → `Location` button): type with `execCommand("insertText")` on `input[aria-label=Location]`, read `[role=option]`. Close with Cancel; nothing publishes.
+
+## Enforcement status checks (read-only)
+
+- Business Support Home `business.facebook.com/business-support-home` lists recent restricted assets; each row's `View Page` link goes to `/accountquality/<portfolio-id>/<asset-id>?asset_view_type=asset`, which shows the decision, review outcome and the "Why this happened" policy text.
+- `business-support-home/?landing_page=overview` lists the personal profile's and every business portfolio's advertising status on one page.
+- Aslan's process exited while loading Business Support Home. Brave (logged into Onur's profile) can be read through AppleScript instead: `tell application "Brave Browser"` → `execute <tab> javascript "document.body.innerText"` on a new tab.
