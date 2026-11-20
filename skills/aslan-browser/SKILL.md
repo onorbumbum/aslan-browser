@@ -1,9 +1,11 @@
 ---
 name: aslan-browser
-description: Drive the Aslan Browser for web browsing, scraping, research, automation, and multi-tab tasks. Aslan is a native macOS AI browser controlled via JSON-RPC over a Unix socket. Load this skill whenever the user asks to browse, search, open tabs, scrape pages, or interact with websites using Aslan.
+description: BEING RETIRED in favour of sand Browser Sandboxes (ops skill section 4a). Use only for an Aslan playbook not yet ported to sand-browser. Drives the Aslan Browser for web browsing, scraping, research, automation, and multi-tab tasks. Aslan is a native macOS AI browser controlled via JSON-RPC over a Unix socket. Load this skill whenever the user asks to browse, search, open tabs, scrape pages, or interact with websites using Aslan.
 ---
 
 # Aslan Browser
+
+> **Being retired.** Client web work now happens in that client's sand **Browser Sandbox** (Chrome in its own Sandbox VM, watched and taken over from Ops → Live Browsers; `sand run <client id lowercased> sand-browser …`, ops skill section 4a). Use Aslan only for a playbook below that has not been ported yet, and never sign a new client's account in to Aslan. Plan and progress: `~/_PROJECTS/sand/issues/sand/prd-retire-aslan-browser.md` (slices 032–040).
 
 Aslan is a native macOS WKWebView browser driven via the `aslan` CLI. Each command connects, executes one action, prints the result, and disconnects.
 
